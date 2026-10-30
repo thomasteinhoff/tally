@@ -1,0 +1,19 @@
+[package]
+name = "tally-infra"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+async-trait.workspace = true
+rusqlite.workspace = true
+rusqlite_migration.workspace = true
+tally-app.workspace = true
+tally-domain.workspace = true
+tokio-rusqlite.workspace = true
+tracing.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true
+tokio.workspace = true

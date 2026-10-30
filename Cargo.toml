@@ -1,0 +1,42 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/tally-domain",
+    "crates/tally-app",
+    "crates/tally-infra",
+    "src-tauri",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.95"
+license = "MIT"
+authors = ["Tally"]
+
+[workspace.dependencies]
+tally-domain = { path = "crates/tally-domain" }
+tally-app = { path = "crates/tally-app" }
+tally-infra = { path = "crates/tally-infra" }
+
+async-trait = "0.1"
+chrono = { version = "0.4", features = ["serde"] }
+rusqlite = { version = "0.40", default-features = false, features = ["bundled"] }
+rusqlite_migration = "2.6"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tempfile = "3"
+thiserror = "2"
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "sync", "time"] }
+tokio-rusqlite = { version = "0.8", features = ["bundled"] }
+tracing = "0.1"
+tracing-appender = "0.2"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
+ts-rs = "12"
+uuid = { version = "1", features = ["v7", "serde"] }
+
+tauri = { version = "2.12", features = [] }
+tauri-build = { version = "2.5", features = [] }
+tauri-plugin-dialog = "2.6"
+tauri-plugin-opener = "2.5"
+tauri-plugin-single-instance = "2.3"
