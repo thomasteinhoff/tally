@@ -51,13 +51,74 @@ impl Database {
         F: FnOnce(&mut rusqlite::Connection) -> rusqlite::Result<R> + Send + 'static,
         R: Send + 'static,
     {
-        self.connection.call(function).await.map_err(|error| {
-            AppError::database(
-                "falha ao executar operação no banco de dados",
-                error.to_string(),
-            )
-        })
+        self.connection
+            .call(function)
+            .await
+            .map_err(map_async_error)
     }
+
+    /// Executa uma mutation em uma única transação.
+    ///
+    /// O rollback acontece automaticamente quando o closure retorna erro.
+    pub async fn transaction<F, R>(&self, function: F) -> Result<R, AppError>
+    where
+        F: FnOnce(&mut rusqlite::Transaction<'_>) -> Result<R, AppError> + Send + 'static,
+        R: Send + 'static,
+    {
+        self.connection
+            .call(move |connection| {
+                let mut transaction = connection.transaction()?;
+                let result = function(&mut transaction);
+
+                match result {
+                    Ok(value) => {
+                        transaction.commit()?;
+                        Ok(Ok(value))
+                    }
+                    Err(error) => Ok(Err(error)),
+                }
+            })
+            .await
+            .map_err(map_async_error)?
+    }
+}
+
+fn map_async_error(error: tokio_rusqlite::Error) -> AppError {
+    match error {
+        tokio_rusqlite::Error::Error(error) => map_sqlite_error(error),
+        other => AppError::database(
+            "a conexão do banco de dados não está disponível",
+            other.to_string(),
+        ),
+    }
+}
+
+pub(crate) fn map_sqlite_error(error: rusqlite::Error) -> AppError {
+    if let rusqlite::Error::SqliteFailure(code, message) = &error
+        && code.code == rusqlite::ErrorCode::ConstraintViolation
+    {
+        let message = message.as_deref().unwrap_or_default();
+
+        if message.contains("accounts.name") {
+            return AppError::conflict("já existe uma conta com esse nome");
+        }
+
+        if message.contains("categories.name") {
+            return AppError::conflict("já existe uma categoria com esse nome e tipo");
+        }
+
+        if message.contains("FOREIGN KEY constraint failed") {
+            return AppError::conflict("o registro está em uso e não pode ser excluído");
+        }
+
+        tracing::warn!(error = %error, "violação de constraint no SQLite");
+        return AppError::validation("os dados informados violam uma regra do banco");
+    }
+
+    AppError::database(
+        "falha ao executar operação no banco de dados",
+        error.to_string(),
+    )
 }
 
 fn configure_sync(connection: &SyncConnection) -> Result<(), AppError> {

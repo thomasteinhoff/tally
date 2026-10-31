@@ -1,6 +1,14 @@
 import { describe, expect, it } from "vitest";
 
-import { formatCents } from "./format";
+import {
+  formatAmountInput,
+  formatCents,
+  formatDate,
+  movementAmountForInput,
+  normalizeTimeInput,
+  parseAmountToCents,
+  periodLabel,
+} from "./format";
 
 describe("formatCents", () => {
   it("formata centavos inteiros em BRL", () => {
@@ -14,5 +22,67 @@ describe("formatCents", () => {
     expect(() => formatCents(1.5)).toThrow(RangeError);
     expect(() => formatCents(Number.NaN)).toThrow(RangeError);
     expect(() => formatCents(Number.POSITIVE_INFINITY)).toThrow(RangeError);
+  });
+});
+
+describe("parseAmountToCents", () => {
+  it("interpreta formatos brasileiros sem ponto flutuante", () => {
+    expect(parseAmountToCents("0,00")).toBe(0);
+    expect(parseAmountToCents("1,2")).toBe(120);
+    expect(parseAmountToCents("1.234,56")).toBe(123_456);
+    expect(parseAmountToCents("1234,56")).toBe(123_456);
+    expect(parseAmountToCents("1234.56")).toBe(123_456);
+    expect(parseAmountToCents("1.234")).toBe(123_400);
+    expect(parseAmountToCents(" R$ 1.234,56 ")).toBe(123_456);
+    expect(parseAmountToCents("-1.234,56")).toBe(-123_456);
+    expect(parseAmountToCents("+12")).toBe(1_200);
+  });
+
+  it("recusa entradas inválidas", () => {
+    expect(parseAmountToCents("")).toBeNull();
+    expect(parseAmountToCents("abc")).toBeNull();
+    expect(parseAmountToCents("1,234")).toBeNull();
+    expect(parseAmountToCents("1,2,3")).toBeNull();
+    expect(parseAmountToCents("-")).toBeNull();
+  });
+});
+
+describe("normalizeTimeInput", () => {
+  it("normaliza horários 24h digitados", () => {
+    expect(normalizeTimeInput("")).toBe("");
+    expect(normalizeTimeInput("9")).toBe("09:00");
+    expect(normalizeTimeInput("930")).toBe("09:30");
+    expect(normalizeTimeInput("0930")).toBe("09:30");
+    expect(normalizeTimeInput("9:5")).toBe("09:05");
+    expect(normalizeTimeInput("15:30")).toBe("15:30");
+    expect(normalizeTimeInput("23:59")).toBe("23:59");
+  });
+
+  it("recusa horários inválidos", () => {
+    expect(normalizeTimeInput("24:00")).toBeNull();
+    expect(normalizeTimeInput("12:60")).toBeNull();
+    expect(normalizeTimeInput("abc")).toBeNull();
+  });
+});
+
+describe("formatação de apoio", () => {
+  it("converte centavos para campo de formulário", () => {
+    expect(formatAmountInput(0)).toBe("0,00");
+    expect(formatAmountInput(123_456)).toBe("1.234,56");
+    expect(formatAmountInput(-1_234)).toBe("-12,34");
+  });
+
+  it("formata datas ISO e períodos do domínio", () => {
+    expect(formatDate("2026-10-31")).toBe("31/10/2026");
+    expect(formatDate("31/10/2026")).toBe("31/10/2026");
+    expect(periodLabel("madrugada")).toBe("Madrugada");
+    expect(periodLabel(null)).toBe("—");
+  });
+
+  it("usa magnitude no formulário exceto para ajustes assinados", () => {
+    expect(movementAmountForInput("expense", -25_000)).toBe(25_000);
+    expect(movementAmountForInput("transfer", -7_000)).toBe(7_000);
+    expect(movementAmountForInput("income", 12_000)).toBe(12_000);
+    expect(movementAmountForInput("adjustment", -9_000)).toBe(-9_000);
   });
 });

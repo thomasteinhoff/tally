@@ -1,4 +1,17 @@
+export type { AccountDto } from "./AccountDto";
+export type { AccountStatementDto } from "./AccountStatementDto";
 export type { AppErrorDto } from "./AppErrorDto";
 export type { BootstrapDto } from "./BootstrapDto";
+export type { CategoryDto } from "./CategoryDto";
+export type { CreateAccountInput } from "./CreateAccountInput";
+export type { CreateAdjustmentInput } from "./CreateAdjustmentInput";
+export type { CreateCategoryInput } from "./CreateCategoryInput";
+export type { CreateExpenseInput } from "./CreateExpenseInput";
+export type { CreateIncomeInput } from "./CreateIncomeInput";
+export type { CreateTransferInput } from "./CreateTransferInput";
 export type { IntegrityReportDto } from "./IntegrityReportDto";
+export type { MovementDto } from "./MovementDto";
+export type { MovementFilter } from "./MovementFilter";
 export type { SettingsDto } from "./SettingsDto";
+export type { StatementLineDto } from "./StatementLineDto";
+export type { UpdateMovementInput } from "./UpdateMovementInput";

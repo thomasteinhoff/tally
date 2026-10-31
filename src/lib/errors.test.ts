@@ -6,7 +6,7 @@ describe("isAppErrorDto", () => {
   it("aceita a forma pública de erro", () => {
     expect(
       isAppErrorDto({
-        code: "DATABASE",
+        code: "DB",
         message: "falha no banco",
         details: "detalhe técnico",
       }),
@@ -14,7 +14,7 @@ describe("isAppErrorDto", () => {
 
     expect(
       isAppErrorDto({
-        code: "DATABASE",
+        code: "DB",
         message: "falha no banco",
         details: null,
       }),
@@ -27,14 +27,14 @@ describe("isAppErrorDto", () => {
     expect(isAppErrorDto({ code: 1, message: "falha", details: null })).toBe(
       false,
     );
-    expect(isAppErrorDto({ code: "DATABASE", message: "falha" })).toBe(false);
+    expect(isAppErrorDto({ code: "DB", message: "falha" })).toBe(false);
   });
 });
 
 describe("normalizeError", () => {
   it("preserva um AppErrorDto válido", () => {
     const error = {
-      code: "BOOTSTRAP",
+      code: "DB",
       message: "o banco não está disponível",
       details: "arquivo bloqueado",
     };

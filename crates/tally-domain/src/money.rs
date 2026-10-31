@@ -26,6 +26,10 @@ impl Money {
         self.0.checked_sub(other.0).map(Self)
     }
 
+    pub fn checked_neg(self) -> Option<Self> {
+        self.0.checked_neg().map(Self)
+    }
+
     pub const fn is_zero(self) -> bool {
         self.0 == 0
     }
@@ -61,5 +65,14 @@ mod tests {
             Money::from_cents(i64::MIN).checked_sub(Money::from_cents(1)),
             None
         );
+    }
+
+    #[test]
+    fn checked_negation_detects_overflow() {
+        assert_eq!(
+            Money::from_cents(1_000).checked_neg(),
+            Some(Money::from_cents(-1_000))
+        );
+        assert_eq!(Money::from_cents(i64::MIN).checked_neg(), None);
     }
 }

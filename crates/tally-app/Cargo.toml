@@ -7,10 +7,12 @@ license.workspace = true
 
 [dependencies]
 async-trait.workspace = true
+chrono.workspace = true
 serde.workspace = true
 tally-domain.workspace = true
 thiserror.workspace = true
 ts-rs.workspace = true
+uuid.workspace = true
 
 [dev-dependencies]
 serde_json.workspace = true

@@ -55,7 +55,25 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             commands::get_bootstrap,
-            commands::run_integrity_check
+            commands::run_integrity_check,
+            commands::list_accounts,
+            commands::create_account,
+            commands::update_account,
+            commands::set_account_archived,
+            commands::delete_account,
+            commands::list_categories,
+            commands::create_category,
+            commands::update_category,
+            commands::set_category_archived,
+            commands::delete_category,
+            commands::list_movements,
+            commands::create_expense,
+            commands::create_income,
+            commands::create_transfer,
+            commands::create_adjustment,
+            commands::update_movement,
+            commands::delete_movement,
+            commands::get_account_statement
         ])
         .run(tauri::generate_context!())
         .expect("erro ao executar o Tally");

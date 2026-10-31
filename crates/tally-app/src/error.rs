@@ -35,13 +35,7 @@ pub enum AppError {
     },
 
     #[error("{message}")]
-    Bootstrap {
-        message: String,
-        details: Option<String>,
-    },
-
-    #[error("{message}")]
-    Internal {
+    Integrity {
         message: String,
         details: Option<String>,
     },
@@ -80,29 +74,8 @@ impl AppError {
         }
     }
 
-    pub fn bootstrap(message: impl Into<String>) -> Self {
-        Self::Bootstrap {
-            message: message.into(),
-            details: None,
-        }
-    }
-
-    pub fn bootstrap_with_details(message: impl Into<String>, details: impl Into<String>) -> Self {
-        Self::Bootstrap {
-            message: message.into(),
-            details: Some(details.into()),
-        }
-    }
-
-    pub fn internal(message: impl Into<String>) -> Self {
-        Self::Internal {
-            message: message.into(),
-            details: None,
-        }
-    }
-
-    pub fn internal_with_details(message: impl Into<String>, details: impl Into<String>) -> Self {
-        Self::Internal {
+    pub fn integrity(message: impl Into<String>, details: impl Into<String>) -> Self {
+        Self::Integrity {
             message: message.into(),
             details: Some(details.into()),
         }
@@ -113,10 +86,9 @@ impl AppError {
             Self::Validation { .. } => "VALIDATION",
             Self::NotFound { .. } => "NOT_FOUND",
             Self::Conflict { .. } => "CONFLICT",
-            Self::Database { .. } => "DATABASE",
+            Self::Database { .. } => "DB",
             Self::Io { .. } => "IO",
-            Self::Bootstrap { .. } => "BOOTSTRAP",
-            Self::Internal { .. } => "INTERNAL",
+            Self::Integrity { .. } => "INTEGRITY",
         }
     }
 
@@ -127,8 +99,7 @@ impl AppError {
             | Self::Conflict { message }
             | Self::Database { message, .. }
             | Self::Io { message, .. }
-            | Self::Bootstrap { message, .. }
-            | Self::Internal { message, .. } => message,
+            | Self::Integrity { message, .. } => message,
         }
     }
 
@@ -137,8 +108,7 @@ impl AppError {
             Self::Validation { .. } | Self::NotFound { .. } | Self::Conflict { .. } => None,
             Self::Database { details, .. }
             | Self::Io { details, .. }
-            | Self::Bootstrap { details, .. }
-            | Self::Internal { details, .. } => details.as_deref(),
+            | Self::Integrity { details, .. } => details.as_deref(),
         }
     }
 
@@ -169,8 +139,18 @@ mod tests {
         let error = AppError::database("falha no banco", "detalhe técnico");
         let value = serde_json::to_value(&error).expect("erro deve serializar");
 
-        assert_eq!(value["code"], "DATABASE");
+        assert_eq!(value["code"], "DB");
         assert_eq!(value["message"], "falha no banco");
         assert_eq!(value["details"], "detalhe técnico");
+    }
+
+    #[test]
+    fn exposes_the_closed_error_codes() {
+        assert_eq!(AppError::validation("x").code(), "VALIDATION");
+        assert_eq!(AppError::not_found("x").code(), "NOT_FOUND");
+        assert_eq!(AppError::conflict("x").code(), "CONFLICT");
+        assert_eq!(AppError::database("x", "y").code(), "DB");
+        assert_eq!(AppError::io("x", "y").code(), "IO");
+        assert_eq!(AppError::integrity("x", "y").code(), "INTEGRITY");
     }
 }
