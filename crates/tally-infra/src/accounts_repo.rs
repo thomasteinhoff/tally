@@ -7,7 +7,7 @@ use tally_app::error::AppError;
 use crate::db::{Database, map_sqlite_error};
 
 const SELECT_ACCOUNT: &str = "
-    SELECT a.id, a.name, a.type, a.archived_at, a.created_at,
+    SELECT a.id, a.name, a.type, a.credit_limit_cents, a.archived_at, a.created_at,
            COALESCE(b.balance_cents, 0) AS balance_cents
     FROM accounts a
     LEFT JOIN (
@@ -57,11 +57,17 @@ impl AccountsRepository for SqliteAccountsRepository {
                             id, name, class, type, is_system, credit_limit_cents,
                             archived_at, created_at, updated_at
                          ) VALUES (
-                            ?1, ?2, 'asset', ?3, 0, NULL, NULL,
+                            ?1, ?2, ?3, ?4, 0, ?5, NULL,
                             strftime('%Y-%m-%dT%H:%M:%fZ', 'now'),
                             strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
                          )",
-                        params![account.id, account.name, account.account_type.as_str()],
+                        params![
+                            account.id,
+                            account.name,
+                            account.account_type.class(),
+                            account.account_type.as_str(),
+                            account.credit_limit_cents,
+                        ],
                     )
                     .map_err(map_sqlite_error)?;
 
@@ -255,8 +261,9 @@ fn map_account_row(row: &Row<'_>) -> rusqlite::Result<AccountDto> {
         id: row.get(0)?,
         name: row.get(1)?,
         account_type: row.get(2)?,
-        archived_at: row.get(3)?,
-        created_at: row.get(4)?,
-        balance_cents: row.get(5)?,
+        credit_limit_cents: row.get(3)?,
+        archived_at: row.get(4)?,
+        created_at: row.get(5)?,
+        balance_cents: row.get(6)?,
     })
 }

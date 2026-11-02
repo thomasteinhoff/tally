@@ -107,6 +107,7 @@
       name: request.name,
       account_type: request.accountType,
       opening_balance_cents: request.openingBalanceCents,
+      credit_limit_cents: request.creditLimitCents,
     });
   }
 
@@ -141,8 +142,8 @@
     <span class="eyebrow">Patrimônio</span>
     <h2>Contas</h2>
     <p>
-      Contas de ativo com saldo derivado do ledger. Arquivar preserva o
-      histórico; excluir só é possível sem movimentações.
+      Contas de ativo e cartões com saldo derivado do ledger. Arquivar preserva
+      o histórico; excluir só é possível sem movimentações.
     </p>
   </div>
   <button type="button" class="button button--primary" onclick={openNew}>
@@ -152,15 +153,15 @@
 
 <section class="summary-strip" aria-label="Resumo das contas ativas">
   <div>
-    <span class="data-label">Saldo das contas ativas</span>
+    <span class="data-label">Patrimônio líquido das contas</span>
     <strong class="summary-value">{formatCents(totalCents)}</strong>
   </div>
   <div>
-    <span class="data-label">Contas ativas</span>
+    <span class="data-label">Contas e cartões ativos</span>
     <strong class="summary-value">{activeAccounts.length}</strong>
   </div>
   <div class="summary-note">
-    <span class="mono">saldos derivados de postings publicados</span>
+    <span class="mono">ativos menos dívidas de cartão</span>
   </div>
 </section>
 
@@ -231,7 +232,12 @@
             <tr class:row-muted={Boolean(account.archived_at)}>
               <td>
                 <div class="cell-stack">
-                  <a class="text-link" href="#/contas/{account.id}">
+                  <a
+                    class="text-link"
+                    href={account.account_type === "credit_card"
+                      ? `#/cartoes/${account.id}`
+                      : `#/contas/${account.id}`}
+                  >
                     {account.name}
                   </a>
                   <small class="mono">{account.id.slice(0, 8)}</small>
@@ -254,8 +260,13 @@
               </td>
               <td class="align-right">
                 <div class="row-actions">
-                  <a class="button button--small" href="#/contas/{account.id}">
-                    Extrato
+                  <a
+                    class="button button--small"
+                    href={account.account_type === "credit_card"
+                      ? `#/cartoes/${account.id}`
+                      : `#/contas/${account.id}`}
+                  >
+                    {account.account_type === "credit_card" ? "Cartão" : "Extrato"}
                   </a>
                   <button
                     type="button"

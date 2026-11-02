@@ -3479,12 +3479,16 @@ dependencies = [
 [[package]]
 name = "tally-domain"
 version = "0.1.0"
+dependencies = [
+ "chrono",
+]
 
 [[package]]
 name = "tally-infra"
 version = "0.1.0"
 dependencies = [
  "async-trait",
+ "chrono",
  "rusqlite",
  "rusqlite_migration",
  "tally-app",

@@ -7,7 +7,11 @@
   import { dismissToast, toastState } from "./lib/toast.svelte";
   import { requestNewMovement } from "./lib/ui.svelte";
   import AccountsPage from "./pages/AccountsPage.svelte";
+  import CardDetailPage from "./pages/CardDetailPage.svelte";
+  import CardsPage from "./pages/CardsPage.svelte";
   import CategoriesPage from "./pages/CategoriesPage.svelte";
+  import InstallmentDetailPage from "./pages/InstallmentDetailPage.svelte";
+  import InstallmentsPage from "./pages/InstallmentsPage.svelte";
   import MovementsPage from "./pages/MovementsPage.svelte";
   import OverviewPage from "./pages/OverviewPage.svelte";
   import SettingsPage from "./pages/SettingsPage.svelte";
@@ -51,16 +55,30 @@
           ? "Contas"
           : route.name === "statement"
             ? "Extrato"
-            : route.name === "categories"
-              ? "Categorias"
-              : route.name === "settings"
-                ? "Configurações"
-                : "Rota indisponível",
+            : route.name === "cards"
+              ? "Cartões"
+              : route.name === "card"
+                ? "Cartão"
+                : route.name === "installments"
+                  ? "Parcelamentos"
+                  : route.name === "installment"
+                    ? "Parcelamento"
+                    : route.name === "categories"
+                      ? "Categorias"
+                      : route.name === "settings"
+                        ? "Configurações"
+                        : "Rota indisponível",
   );
 
   function active(section: string): boolean {
     if (section === "accounts") {
       return route.name === "accounts" || route.name === "statement";
+    }
+    if (section === "cards") {
+      return route.name === "cards" || route.name === "card";
+    }
+    if (section === "installments") {
+      return route.name === "installments" || route.name === "installment";
     }
     return route.name === section;
   }
@@ -127,9 +145,22 @@
         >
           Contas
         </a>
-        <span class="nav-item is-disabled" aria-disabled="true" title="Phase 2">
+        <a
+          class="nav-item"
+          class:is-active={active("cards")}
+          aria-current={active("cards") ? "page" : undefined}
+          href="#/cartoes"
+        >
           Cartões
-        </span>
+        </a>
+        <a
+          class="nav-item"
+          class:is-active={active("installments")}
+          aria-current={active("installments") ? "page" : undefined}
+          href="#/parcelamentos"
+        >
+          Parcelamentos
+        </a>
       </div>
 
       <div class="nav-group">
@@ -173,7 +204,7 @@
   <main class="main">
     <header class="topbar">
       <div class="topbar-left">
-        <span class="eyebrow">Tally / Phase 1</span>
+        <span class="eyebrow">Tally / Phase 2</span>
         <h1>{pageTitle}</h1>
       </div>
       <div class="topbar-right">
@@ -210,6 +241,14 @@
         <AccountsPage />
       {:else if route.name === "statement"}
         <StatementPage accountId={route.accountId} />
+      {:else if route.name === "cards"}
+        <CardsPage />
+      {:else if route.name === "card"}
+        <CardDetailPage cardId={route.cardId} />
+      {:else if route.name === "installments"}
+        <InstallmentsPage />
+      {:else if route.name === "installment"}
+        <InstallmentDetailPage planId={route.planId} />
       {:else if route.name === "categories"}
         <CategoriesPage />
       {:else if route.name === "settings"}
@@ -220,8 +259,8 @@
             <span class="state-kicker">404</span>
             <h2>Rota não implementada.</h2>
             <p>
-              O caminho <span class="mono">{route.path}</span> não pertence à
-              Phase 1.
+              O caminho <span class="mono">{route.path}</span> não existe nesta
+              aplicação.
             </p>
             <div class="state-actions">
               <a class="button button--primary" href="#/">Voltar à visão geral</a>

@@ -1,12 +1,14 @@
 use tally_app::{
     AccountDto, AccountStatementDto, AccountsService, AppError, BootstrapDto, BootstrapService,
-    CategoriesService, CategoryDto, CreateAccountInput, CreateAdjustmentInput, CreateCategoryInput,
-    CreateExpenseInput, CreateIncomeInput, CreateTransferInput, IntegrityReportDto, MovementDto,
-    MovementFilter, MovementsService, UpdateMovementInput,
+    CardPaymentDto, CardSummaryDto, CardsService, CategoriesService, CategoryDto,
+    CreateAccountInput, CreateAdjustmentInput, CreateCardPaymentInput, CreateCardPurchaseInput,
+    CreateCategoryInput, CreateExpenseInput, CreateIncomeInput, CreateTransferInput,
+    InstallmentPlanDto, IntegrityReportDto, MovementDto, MovementFilter, MovementsService,
+    UpdateMovementInput,
 };
 use tally_infra::{
-    Database, SqliteAccountsRepository, SqliteBootstrapRepository, SqliteCategoriesRepository,
-    SqliteMovementsRepository,
+    Database, SqliteAccountsRepository, SqliteBootstrapRepository, SqliteCardsRepository,
+    SqliteCategoriesRepository, SqliteMovementsRepository,
 };
 use tauri::State;
 
@@ -44,6 +46,11 @@ fn movements_service(
 ) -> Result<MovementsService<SqliteMovementsRepository>, AppError> {
     let db = database(state)?;
     Ok(MovementsService::new(SqliteMovementsRepository::new(db)))
+}
+
+fn cards_service(state: &AppState) -> Result<CardsService<SqliteCardsRepository>, AppError> {
+    let db = database(state)?;
+    Ok(CardsService::new(SqliteCardsRepository::new(db)))
 }
 
 #[tauri::command]
@@ -231,5 +238,82 @@ pub async fn get_account_statement(
 ) -> Result<AccountStatementDto, AppError> {
     movements_service(state.inner())?
         .statement(&account_id, from.as_deref(), to.as_deref())
+        .await
+}
+
+#[tauri::command]
+pub async fn list_cards(state: State<'_, AppState>) -> Result<Vec<CardSummaryDto>, AppError> {
+    cards_service(state.inner())?.list_cards().await
+}
+
+#[tauri::command]
+pub async fn get_card(
+    state: State<'_, AppState>,
+    card_account_id: String,
+) -> Result<CardSummaryDto, AppError> {
+    cards_service(state.inner())?
+        .card_summary(&card_account_id)
+        .await
+}
+
+#[tauri::command]
+pub async fn create_card_purchase(
+    state: State<'_, AppState>,
+    input: CreateCardPurchaseInput,
+) -> Result<InstallmentPlanDto, AppError> {
+    cards_service(state.inner())?.create_purchase(input).await
+}
+
+#[tauri::command]
+pub async fn list_installment_plans(
+    state: State<'_, AppState>,
+    card_account_id: Option<String>,
+) -> Result<Vec<InstallmentPlanDto>, AppError> {
+    cards_service(state.inner())?
+        .list_plans(card_account_id)
+        .await
+}
+
+#[tauri::command]
+pub async fn get_installment_plan(
+    state: State<'_, AppState>,
+    plan_id: String,
+) -> Result<InstallmentPlanDto, AppError> {
+    cards_service(state.inner())?.get_plan(&plan_id).await
+}
+
+#[tauri::command]
+pub async fn delete_installment_plan(
+    state: State<'_, AppState>,
+    plan_id: String,
+) -> Result<(), AppError> {
+    cards_service(state.inner())?.delete_plan(&plan_id).await
+}
+
+#[tauri::command]
+pub async fn create_card_payment(
+    state: State<'_, AppState>,
+    input: CreateCardPaymentInput,
+) -> Result<CardPaymentDto, AppError> {
+    cards_service(state.inner())?.create_payment(input).await
+}
+
+#[tauri::command]
+pub async fn list_card_payments(
+    state: State<'_, AppState>,
+    card_account_id: Option<String>,
+) -> Result<Vec<CardPaymentDto>, AppError> {
+    cards_service(state.inner())?
+        .list_payments(card_account_id)
+        .await
+}
+
+#[tauri::command]
+pub async fn delete_card_payment(
+    state: State<'_, AppState>,
+    payment_id: String,
+) -> Result<(), AppError> {
+    cards_service(state.inner())?
+        .delete_payment(&payment_id)
         .await
 }

@@ -1,7 +1,4 @@
-/// Tipos de conta disponíveis na Phase 1.
-///
-/// Cartão de crédito é liability e entra na Phase 2; por isso não está
-/// listado aqui e `create_account` o rejeita por enquanto.
+/// Tipos de conta disponíveis na V1.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum AccountType {
     Bank,
@@ -10,16 +7,18 @@ pub enum AccountType {
     Investment,
     DigitalWallet,
     OtherAsset,
+    CreditCard,
 }
 
 impl AccountType {
-    pub const ALL: [AccountType; 6] = [
+    pub const ALL: [AccountType; 7] = [
         AccountType::Bank,
         AccountType::Cash,
         AccountType::Savings,
         AccountType::Investment,
         AccountType::DigitalWallet,
         AccountType::OtherAsset,
+        AccountType::CreditCard,
     ];
 
     pub const fn as_str(self) -> &'static str {
@@ -30,6 +29,7 @@ impl AccountType {
             AccountType::Investment => "investment",
             AccountType::DigitalWallet => "digital_wallet",
             AccountType::OtherAsset => "other_asset",
+            AccountType::CreditCard => "credit_card",
         }
     }
 
@@ -41,8 +41,21 @@ impl AccountType {
             "investment" => Some(AccountType::Investment),
             "digital_wallet" => Some(AccountType::DigitalWallet),
             "other_asset" => Some(AccountType::OtherAsset),
+            "credit_card" => Some(AccountType::CreditCard),
             _ => None,
         }
+    }
+
+    /// Classe contábil da conta. Cartão é passivo; o restante é ativo.
+    pub const fn class(self) -> &'static str {
+        match self {
+            AccountType::CreditCard => "liability",
+            _ => "asset",
+        }
+    }
+
+    pub const fn is_credit_card(self) -> bool {
+        matches!(self, AccountType::CreditCard)
     }
 }
 
@@ -61,8 +74,20 @@ mod tests {
     }
 
     #[test]
-    fn rejects_types_outside_phase_one() {
-        assert_eq!(AccountType::parse("credit_card"), None);
+    fn only_credit_card_is_a_liability() {
+        for account_type in AccountType::ALL {
+            let expected = if account_type == AccountType::CreditCard {
+                "liability"
+            } else {
+                "asset"
+            };
+            assert_eq!(account_type.class(), expected);
+        }
+    }
+
+    #[test]
+    fn rejects_unknown_types() {
         assert_eq!(AccountType::parse(""), None);
+        assert_eq!(AccountType::parse("credit"), None);
     }
 }

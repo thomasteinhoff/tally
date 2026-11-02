@@ -43,6 +43,7 @@ async fn account(fixture: &Fixture, name: &str, opening: i64) -> String {
             name: name.to_owned(),
             account_type: "bank".to_owned(),
             opening_balance_cents: opening,
+            credit_limit_cents: None,
         })
         .await
         .expect("account should be created")

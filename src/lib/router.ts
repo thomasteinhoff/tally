@@ -3,6 +3,10 @@ export type Route =
   | { name: "movements" }
   | { name: "accounts" }
   | { name: "statement"; accountId: string }
+  | { name: "cards" }
+  | { name: "card"; cardId: string }
+  | { name: "installments" }
+  | { name: "installment"; planId: string }
   | { name: "categories" }
   | { name: "settings" }
   | { name: "unavailable"; path: string };
@@ -22,6 +26,10 @@ export function parseRoute(hash: string): Route {
         return { name: "movements" };
       case "contas":
         return { name: "accounts" };
+      case "cartoes":
+        return { name: "cards" };
+      case "parcelamentos":
+        return { name: "installments" };
       case "categorias":
         return { name: "categories" };
       case "configuracoes":
@@ -33,6 +41,14 @@ export function parseRoute(hash: string): Route {
 
   if (segments.length === 2 && segments[0] === "contas") {
     return { name: "statement", accountId: segments[1] };
+  }
+
+  if (segments.length === 2 && segments[0] === "cartoes") {
+    return { name: "card", cardId: segments[1] };
+  }
+
+  if (segments.length === 2 && segments[0] === "parcelamentos") {
+    return { name: "installment", planId: segments[1] };
   }
 
   return { name: "unavailable", path };
@@ -48,6 +64,14 @@ export function routeHref(route: Route): string {
       return "#/contas";
     case "statement":
       return `#/contas/${encodeURIComponent(route.accountId)}`;
+    case "cards":
+      return "#/cartoes";
+    case "card":
+      return `#/cartoes/${encodeURIComponent(route.cardId)}`;
+    case "installments":
+      return "#/parcelamentos";
+    case "installment":
+      return `#/parcelamentos/${encodeURIComponent(route.planId)}`;
     case "categories":
       return "#/categorias";
     case "settings":

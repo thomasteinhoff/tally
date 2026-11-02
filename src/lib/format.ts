@@ -150,6 +150,8 @@ const kindLabels: Record<string, string> = {
   transfer: "Transferência",
   adjustment: "Ajuste",
   opening_balance: "Saldo inicial",
+  card_purchase: "Compra no cartão",
+  card_payment: "Pagamento de cartão",
 };
 
 const paymentLabels: Record<string, string> = {
@@ -167,7 +169,19 @@ const accountTypeLabels: Record<string, string> = {
   investment: "Investimento",
   digital_wallet: "Carteira digital",
   other_asset: "Outro ativo",
+  credit_card: "Cartão de crédito",
 };
+
+const installmentStatusLabels: Record<string, string> = {
+  open: "Em aberto",
+  partial: "Parcial",
+  paid: "Paga",
+  overdue: "Vencida",
+};
+
+export function installmentStatusLabel(status: string): string {
+  return installmentStatusLabels[status] ?? status;
+}
 
 export function periodLabel(period: string | null): string {
   return period ? (periodLabels[period] ?? period) : "—";

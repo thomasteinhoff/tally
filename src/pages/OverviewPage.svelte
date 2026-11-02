@@ -120,7 +120,11 @@
         <ul class="account-list">
           {#each accounts as account (account.id)}
             <li>
-              <a href="#/contas/{account.id}">
+              <a
+                href={account.account_type === "credit_card"
+                  ? `#/cartoes/${account.id}`
+                  : `#/contas/${account.id}`}
+              >
                 <span>
                   <strong>{account.name}</strong>
                   <small>{accountTypeLabel(account.account_type)}</small>

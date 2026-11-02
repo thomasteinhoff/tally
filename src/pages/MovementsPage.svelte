@@ -103,6 +103,22 @@
   const accounts = $derived(accountsQuery.data ?? []);
   const categories = $derived(categoriesQuery.data ?? []);
   const movements = $derived(movementsQuery.data ?? []);
+  const editableKinds = new Set([
+    "expense",
+    "income",
+    "transfer",
+    "adjustment",
+  ]);
+
+  function cardHref(movement: MovementDto): string | null {
+    if (movement.kind === "card_purchase") {
+      return `#/cartoes/${movement.primary_account_id}`;
+    }
+    if (movement.kind === "card_payment" && movement.counterparty_account_id) {
+      return `#/cartoes/${movement.counterparty_account_id}`;
+    }
+    return null;
+  }
 
   $effect(() => {
     if (uiState.openNewMovementRequested) {
@@ -236,7 +252,8 @@
     <h2>Movimentações</h2>
     <p>
       Despesas, receitas, transferências e ajustes publicados em partidas
-      dobradas. Saldos e períodos vêm do Rust.
+      dobradas. Compras e pagamentos de cartão também aparecem, mas são
+      gerenciados na tela do cartão.
     </p>
   </div>
   <button type="button" class="button button--primary" onclick={openNew}>
@@ -412,21 +429,27 @@
               </td>
               <td class="align-right">
                 <div class="row-actions">
-                  <button
-                    type="button"
-                    class="button button--small"
-                    onclick={() => openEdit(movement)}
-                  >
-                    Editar
-                  </button>
-                  <button
-                    type="button"
-                    class="button button--small button--danger"
-                    onclick={() => void confirmDelete(movement)}
-                    disabled={deleteMutation.isPending}
-                  >
-                    Excluir
-                  </button>
+                  {#if editableKinds.has(movement.kind)}
+                    <button
+                      type="button"
+                      class="button button--small"
+                      onclick={() => openEdit(movement)}
+                    >
+                      Editar
+                    </button>
+                    <button
+                      type="button"
+                      class="button button--small button--danger"
+                      onclick={() => void confirmDelete(movement)}
+                      disabled={deleteMutation.isPending}
+                    >
+                      Excluir
+                    </button>
+                  {:else if cardHref(movement)}
+                    <a class="button button--small" href={cardHref(movement)}>
+                      Cartão
+                    </a>
+                  {/if}
                 </div>
               </td>
             </tr>

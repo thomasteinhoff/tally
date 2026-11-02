@@ -73,7 +73,16 @@ pub fn run() {
             commands::create_adjustment,
             commands::update_movement,
             commands::delete_movement,
-            commands::get_account_statement
+            commands::get_account_statement,
+            commands::list_cards,
+            commands::get_card,
+            commands::create_card_purchase,
+            commands::list_installment_plans,
+            commands::get_installment_plan,
+            commands::delete_installment_plan,
+            commands::create_card_payment,
+            commands::list_card_payments,
+            commands::delete_card_payment
         ])
         .run(tauri::generate_context!())
         .expect("erro ao executar o Tally");

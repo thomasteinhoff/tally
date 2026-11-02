@@ -2,7 +2,7 @@
 
 Aplicativo desktop local-first para registrar, acompanhar e medir a vida financeira pessoal.
 
-**Fase atual:** Fase 1 — Core Accounting concluída. O app permite cadastrar contas e categorias, lançar despesas, receitas, transferências e ajustes, consultar o livro, filtrar movimentações e abrir extratos por conta com filtros, saldo atual e saldos por período — tudo derivado dos lançamentos no SQLite.
+**Fase atual:** Fase 2 — Cards & Installments concluída. Além do core contábil, o app permite cadastrar cartões de crédito como passivo, lançar compras parceladas com reconhecimento por parcela, acompanhar dívida, limite e compromissos futuros, e registrar pagamentos FIFO com alocação por parcela — tudo derivado dos lançamentos no SQLite.
 
 ## Stack
 
@@ -91,6 +91,20 @@ src/              UI Svelte, rotas e formulários
 - Extrato por conta com filtros equivalentes, saldo atual como foco no histórico completo e saldos de início/fim quando há período selecionado.
 - Edição e exclusão atômicas; confirmação destrutiva antes de qualquer mutation, sem sucesso otimista.
 - Arquivamento fora do uso normal sem apagar o histórico, com explicação na interface.
-- UI por hash router: visão geral, movimentações, contas, extrato, categorias e configurações.
+- UI por hash router: visão geral, movimentações, contas, extrato, cartões, parcelamentos, categorias e configurações.
 - Testes financeiros de integração, rollback, períodos, saldos e histórico.
 - `Ctrl+N`, confirmações destrutivas, foco em formulários e erros reais via IPC.
+
+## Fase 2 — entregue
+
+- Cartão de crédito como conta de passivo, com limite informativo e dívida inicial.
+- Compra parcelada de 1 a 60 vezes, com divisão exata do total e resto nas primeiras parcelas.
+- Vencimentos preservando o dia original e ajustando para o último dia do mês quando necessário.
+- Reconhecimento de despesa por parcela, sem duplicar a dívida em compromissos futuros.
+- Pagamento de cartão como saída de caixa, FIFO: dívida inicial primeiro, depois parcelas mais antigas.
+- Pagamento parcial, exclusão de pagamento reabrindo parcelas e exclusão segura de parcelamento.
+- Resumo de dívida, disponível, vencido, mês atual, futuro e alerta de limite excedido.
+- Telas de cartões e detalhe do cartão com parcelamentos, parcelas e pagamentos.
+- Telas de parcelamentos com lista consolidada e detalhe do cronograma.
+- Reconhecimentos por parcela excluídos do livro de movimentações comuns; compras e pagamentos de cartão abrem a tela do cartão.
+- Testes financeiros de integração cobrindo os cenários críticos da fase.

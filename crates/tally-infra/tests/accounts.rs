@@ -28,6 +28,7 @@ fn input(name: &str, account_type: &str, opening_balance_cents: i64) -> CreateAc
         name: name.to_owned(),
         account_type: account_type.to_owned(),
         opening_balance_cents,
+        credit_limit_cents: None,
     }
 }
 
@@ -293,6 +294,7 @@ async fn unbalanced_opening_entry_rolls_back_the_account() {
             id: account_id.to_owned(),
             name: "Conta inválida".to_owned(),
             account_type: AccountType::Bank,
+            credit_limit_cents: None,
             opening_entry: Some(OpeningBalance {
                 entry_id: "30000000-0000-7000-8000-000000000001".to_owned(),
                 occurred_on: "2026-10-31".to_owned(),

@@ -1060,6 +1060,39 @@ button {
   border-style: dashed;
 }
 
+.tag--partial {
+  border-color: #d6c49c;
+  background: var(--amber-soft);
+  color: var(--amber);
+}
+
+.plan-block {
+  padding: 16px 18px 18px;
+  border-top: 1px solid var(--rule);
+}
+
+.plan-block:first-of-type {
+  border-top: 0;
+}
+
+.plan-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px 16px;
+  margin-bottom: 12px;
+}
+
+.plan-numbers {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+  color: var(--ink-2);
+  font-family: var(--font-mono);
+  font-size: 11px;
+}
+
 .empty-panel {
   display: flex;
   flex-direction: column;

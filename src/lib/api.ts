@@ -4,13 +4,18 @@ import type {
   AccountDto,
   AccountStatementDto,
   BootstrapDto,
+  CardPaymentDto,
+  CardSummaryDto,
   CategoryDto,
   CreateAccountInput,
   CreateAdjustmentInput,
+  CreateCardPaymentInput,
+  CreateCardPurchaseInput,
   CreateCategoryInput,
   CreateExpenseInput,
   CreateIncomeInput,
   CreateTransferInput,
+  InstallmentPlanDto,
   IntegrityReportDto,
   MovementDto,
   MovementFilter,
@@ -124,4 +129,52 @@ export function getAccountStatement(
     from,
     to,
   });
+}
+
+export function listCards(): Promise<CardSummaryDto[]> {
+  return invoke<CardSummaryDto[]>("list_cards");
+}
+
+export function getCard(cardAccountId: string): Promise<CardSummaryDto> {
+  return invoke<CardSummaryDto>("get_card", { cardAccountId });
+}
+
+export function createCardPurchase(
+  input: CreateCardPurchaseInput,
+): Promise<InstallmentPlanDto> {
+  return invoke<InstallmentPlanDto>("create_card_purchase", { input });
+}
+
+export function listInstallmentPlans(
+  cardAccountId: string | null = null,
+): Promise<InstallmentPlanDto[]> {
+  return invoke<InstallmentPlanDto[]>("list_installment_plans", {
+    cardAccountId,
+  });
+}
+
+export function getInstallmentPlan(
+  planId: string,
+): Promise<InstallmentPlanDto> {
+  return invoke<InstallmentPlanDto>("get_installment_plan", { planId });
+}
+
+export function deleteInstallmentPlan(planId: string): Promise<void> {
+  return invoke<void>("delete_installment_plan", { planId });
+}
+
+export function createCardPayment(
+  input: CreateCardPaymentInput,
+): Promise<CardPaymentDto> {
+  return invoke<CardPaymentDto>("create_card_payment", { input });
+}
+
+export function listCardPayments(
+  cardAccountId: string | null = null,
+): Promise<CardPaymentDto[]> {
+  return invoke<CardPaymentDto[]>("list_card_payments", { cardAccountId });
+}
+
+export function deleteCardPayment(paymentId: string): Promise<void> {
+  return invoke<void>("delete_card_payment", { paymentId });
 }

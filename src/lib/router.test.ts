@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import { parseRoute, routeHref } from "./router";
 
 describe("parseRoute", () => {
-  it("mapeia as rotas da Phase 1", () => {
+  it("mapeia as rotas conhecidas", () => {
     expect(parseRoute("")).toEqual({ name: "overview" });
     expect(parseRoute("#/")).toEqual({ name: "overview" });
     expect(parseRoute("#/movimentacoes")).toEqual({ name: "movements" });
@@ -11,6 +11,16 @@ describe("parseRoute", () => {
     expect(parseRoute("#/contas/abc%20123")).toEqual({
       name: "statement",
       accountId: "abc 123",
+    });
+    expect(parseRoute("#/cartoes")).toEqual({ name: "cards" });
+    expect(parseRoute("#/cartoes/abc%20123")).toEqual({
+      name: "card",
+      cardId: "abc 123",
+    });
+    expect(parseRoute("#/parcelamentos")).toEqual({ name: "installments" });
+    expect(parseRoute("#/parcelamentos/abc%20123")).toEqual({
+      name: "installment",
+      planId: "abc 123",
     });
     expect(parseRoute("#/categorias")).toEqual({ name: "categories" });
     expect(parseRoute("#/configuracoes")).toEqual({ name: "settings" });
@@ -20,9 +30,9 @@ describe("parseRoute", () => {
     expect(parseRoute("#/movimentacoes?foo=1")).toEqual({
       name: "movements",
     });
-    expect(parseRoute("#/cartoes")).toEqual({
+    expect(parseRoute("#/relatorios")).toEqual({
       name: "unavailable",
-      path: "/cartoes",
+      path: "/relatorios",
     });
     expect(parseRoute("#/contas/a/b")).toEqual({
       name: "unavailable",
@@ -38,6 +48,14 @@ describe("routeHref", () => {
     expect(routeHref({ name: "accounts" })).toBe("#/contas");
     expect(routeHref({ name: "statement", accountId: "a b" })).toBe(
       "#/contas/a%20b",
+    );
+    expect(routeHref({ name: "cards" })).toBe("#/cartoes");
+    expect(routeHref({ name: "card", cardId: "a b" })).toBe(
+      "#/cartoes/a%20b",
+    );
+    expect(routeHref({ name: "installments" })).toBe("#/parcelamentos");
+    expect(routeHref({ name: "installment", planId: "a b" })).toBe(
+      "#/parcelamentos/a%20b",
     );
     expect(routeHref({ name: "categories" })).toBe("#/categorias");
     expect(routeHref({ name: "settings" })).toBe("#/configuracoes");

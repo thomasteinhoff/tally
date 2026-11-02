@@ -971,6 +971,8 @@ DoD:
 
 ## Phase 2 — Cards & Installments
 
+**STATUS: COMPLETA**
+
 Objetivo:
 
 - cartões;

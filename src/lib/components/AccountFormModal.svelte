@@ -3,17 +3,23 @@
 
   import type { AccountDto } from "../api/bindings";
   import type { AccountFormRequest } from "../form-types";
-  import { accountTypeLabel, parseAmountToCents } from "../format";
+  import {
+    accountTypeLabel,
+    formatAmountInput,
+    parseAmountToCents,
+  } from "../format";
   import Modal from "./Modal.svelte";
 
   let {
     account = null,
+    presetType = null,
     saving,
     error,
     onsave,
     onclose,
   }: {
     account?: AccountDto | null;
+    presetType?: string | null;
     saving: boolean;
     error: string | null;
     onsave: (request: AccountFormRequest) => void;
@@ -23,9 +29,16 @@
   const initial = untrack(() => ({
     editing: account !== null,
     name: account?.name ?? "",
-    accountType: account?.account_type ?? "bank",
+    accountType: account?.account_type ?? presetType ?? "bank",
+    lockType: account !== null || presetType !== null,
+    creditLimitText:
+      account?.credit_limit_cents !== null &&
+      account?.credit_limit_cents !== undefined
+        ? formatAmountInput(account.credit_limit_cents)
+        : "",
   }));
   const editing = initial.editing;
+  const lockType = initial.lockType;
   const accountTypes = [
     "bank",
     "cash",
@@ -33,12 +46,16 @@
     "investment",
     "digital_wallet",
     "other_asset",
+    "credit_card",
   ];
 
   let name = $state(initial.name);
   let accountType = $state(initial.accountType);
   let openingText = $state("0,00");
+  let creditLimitText = $state(initial.creditLimitText);
   let localError = $state<string | null>(null);
+
+  const isCard = $derived(accountType === "credit_card");
 
   function submit(): void {
     localError = null;
@@ -52,8 +69,23 @@
       ? 0
       : parseAmountToCents(openingText);
     if (!editing && openingBalanceCents === null) {
-      localError = "Informe um saldo inicial válido.";
+      localError = isCard
+        ? "Informe uma dívida inicial válida."
+        : "Informe um saldo inicial válido.";
       return;
+    }
+    if (isCard && (openingBalanceCents ?? 0) < 0) {
+      localError = "A dívida inicial do cartão não pode ser negativa.";
+      return;
+    }
+
+    let creditLimitCents: number | null = null;
+    if (isCard && creditLimitText.trim()) {
+      creditLimitCents = parseAmountToCents(creditLimitText);
+      if (creditLimitCents === null || creditLimitCents <= 0) {
+        localError = "Informe um limite de crédito válido ou deixe em branco.";
+        return;
+      }
     }
 
     onsave({
@@ -62,11 +94,19 @@
       name: name.trim(),
       accountType,
       openingBalanceCents: openingBalanceCents ?? 0,
+      creditLimitCents,
     });
   }
 </script>
 
-<Modal title={editing ? "Editar conta" : "Nova conta"} {onclose}>
+<Modal
+  title={editing
+    ? "Editar conta"
+    : isCard
+      ? "Novo cartão"
+      : "Nova conta"}
+  {onclose}
+>
   <form
     class="form"
     onsubmit={(event) => {
@@ -87,7 +127,7 @@
 
       <label class="field">
         <span>Tipo</span>
-        <select bind:value={accountType} disabled={editing}>
+        <select bind:value={accountType} disabled={lockType}>
           {#each accountTypes as type (type)}
             <option value={type}>{accountTypeLabel(type)}</option>
           {/each}
@@ -96,7 +136,7 @@
 
       {#if !editing}
         <label class="field">
-          <span>Saldo inicial</span>
+          <span>{isCard ? "Dívida inicial" : "Saldo inicial"}</span>
           <input
             class="money-input"
             inputmode="decimal"
@@ -105,9 +145,27 @@
           />
         </label>
       {/if}
+
+      {#if isCard && !editing}
+        <label class="field">
+          <span>Limite de crédito <small>opcional</small></span>
+          <input
+            class="money-input"
+            inputmode="decimal"
+            bind:value={creditLimitText}
+            placeholder="0,00"
+          />
+        </label>
+      {/if}
     </div>
 
-    {#if !editing}
+    {#if !editing && isCard}
+      <p class="form-hint">
+        O cartão é um passivo. A dívida inicial entra contra o patrimônio; as
+        compras aumentam a dívida e o pagamento não vira despesa. O limite é
+        informativo e não bloqueia compras.
+      </p>
+    {:else if !editing}
       <p class="form-hint">
         O saldo inicial pode ser negativo. Ele entra contra o patrimônio e não é
         contado como receita. Zero não cria lançamento.

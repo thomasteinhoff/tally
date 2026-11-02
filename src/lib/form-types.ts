@@ -4,6 +4,7 @@ export type AccountFormRequest = {
   name: string;
   accountType: string;
   openingBalanceCents: number;
+  creditLimitCents: number | null;
 };
 
 export type CategoryFormRequest = {

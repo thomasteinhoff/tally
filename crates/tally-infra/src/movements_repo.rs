@@ -10,7 +10,7 @@ use tally_domain::movement::MovementKind;
 use crate::db::{Database, map_sqlite_error};
 
 const SELECT_ACCOUNT: &str = "
-    SELECT a.id, a.name, a.type, a.archived_at, a.created_at,
+    SELECT a.id, a.name, a.type, a.credit_limit_cents, a.archived_at, a.created_at,
            COALESCE((
                SELECT SUM(p.amount_cents)
                FROM postings p
@@ -37,6 +37,9 @@ const SELECT_MOVEMENT: &str = "
     LEFT JOIN accounts ca ON ca.id = e.counterparty_account_id
     LEFT JOIN categories c ON c.id = e.category_id
     WHERE e.posted_at IS NOT NULL AND e.kind <> 'opening_balance'
+      AND NOT EXISTS (
+          SELECT 1 FROM installments i WHERE i.recognition_entry_id = e.id
+      )
 ";
 
 #[derive(Clone)]
@@ -566,8 +569,9 @@ fn map_account_row(row: &Row<'_>) -> rusqlite::Result<AccountDto> {
         id: row.get(0)?,
         name: row.get(1)?,
         account_type: row.get(2)?,
-        archived_at: row.get(3)?,
-        created_at: row.get(4)?,
-        balance_cents: row.get(5)?,
+        credit_limit_cents: row.get(3)?,
+        archived_at: row.get(4)?,
+        created_at: row.get(5)?,
+        balance_cents: row.get(6)?,
     })
 }
