@@ -112,11 +112,42 @@ Validações realizadas:
 - `npm run tauri build -- --no-bundle` passou
 - smoke test do `tally.exe` iniciou e permaneceu aberto
 
+### Phase 2 — Cards & Installments
+
+**STATUS: COMPLETA.**
+
+A Phase 2 foi publicada em `main` no commit `5ec1f7f` e aprovada em teste manual.
+
+Entregue:
+
+- cartão de crédito como conta de passivo, com limite informativo e dívida inicial;
+- compras à vista e parceladas de 1 a 60 vezes;
+- divisão exata do total, com resto nas primeiras parcelas;
+- vencimentos preservando o dia e ajustando ao fim do mês;
+- reconhecimento de despesa por parcela, sem duplicar dívida;
+- pagamentos FIFO, parciais e acima da dívida sem virar despesa;
+- telas de cartão, parcelamento, pagamentos e compromissos;
+- compra no cartão também pelo fluxo geral de nova movimentação;
+- livro de movimentações com o total da compra parcelada em uma única linha, resumo das parcelas e link para o plano;
+- período visível por parcela, herdado da compra;
+- valor não alocado de pagamento exibido como crédito no cartão;
+- exclusão de parcelamento com pagamentos bloqueada com explicação.
+
+Validações realizadas após os ajustes:
+
+- `npm run check` sem erros/warnings
+- `npm test` passou
+- `cargo fmt --all -- --check` passou
+- `cargo clippy --workspace --all-targets -- -D warnings` passou
+- `cargo test --workspace` passou
+- `npm run build` passou
+- `npm run tauri build -- --no-bundle` passou
+
 ### Próximo trabalho
 
-**Phase 2 — Cards & Installments**
+**Phase 3 — Reports & Data**
 
-Não iniciar Phase 2 antes de versionar e publicar a Phase 1.
+Não iniciar Phase 4 antes de concluir e validar relatórios, backup, restauração, CSV e integridade.
 
 ---
 
@@ -1183,13 +1214,13 @@ Não copie a sessão inteira para contexto sem necessidade.
 
 # 15. Próximo passo exato
 
-**Implementar somente a Phase 2 — Cards & Installments.**
+**Implementar somente a Phase 3 — Reports & Data.**
 
-Começar pelo backend/domínio e pelos testes financeiros, depois conectar as telas.
+Começar pelo backend/domínio, consultas e testes; depois conectar as telas.
 
-Não começar relatórios avançados, distribuição ou funcionalidades V2 antes de concluir cartões e parcelamentos.
+Não iniciar Phase 4, refinamento visual amplo ou funcionalidades V2 antes de concluir e validar relatórios, dados e integridade.
 
 A primeira meta é:
 
-> Tally consegue registrar cartões, compras à vista e parceladas, compromissos futuros, pagamentos FIFO/parciais e reconhecimento por parcela com ledger balanceado, dívida e patrimônio corretos e testes financeiros confiáveis.
+> Tally entrega dashboard, relatórios de gastos, receitas, fluxo de caixa, patrimônio líquido e compromissos, além de backup local, restauração, exportação CSV e verificação de integridade, sempre lendo apenas dados persistidos e sem recalcular regras financeiras no frontend.
 

@@ -31,11 +31,18 @@ const SELECT_MOVEMENT: &str = "
                FROM postings p
                WHERE p.entry_id = e.id AND p.account_id = e.primary_account_id
            ), 0) AS amount_cents,
-           e.created_at
+           e.created_at,
+           ip.id, ip.installment_count,
+           (SELECT i.amount_cents
+            FROM installments i
+            WHERE i.plan_id = ip.id
+            ORDER BY i.seq
+            LIMIT 1) AS first_installment_cents
     FROM journal_entries e
     JOIN accounts pa ON pa.id = e.primary_account_id
     LEFT JOIN accounts ca ON ca.id = e.counterparty_account_id
     LEFT JOIN categories c ON c.id = e.category_id
+    LEFT JOIN installment_plans ip ON ip.purchase_entry_id = e.id
     WHERE e.posted_at IS NOT NULL AND e.kind <> 'opening_balance'
       AND NOT EXISTS (
           SELECT 1 FROM installments i WHERE i.recognition_entry_id = e.id
@@ -561,6 +568,9 @@ fn map_movement_row(row: &Row<'_>) -> rusqlite::Result<MovementDto> {
         payment_method: row.get(13)?,
         amount_cents: row.get(14)?,
         created_at: row.get(15)?,
+        installment_plan_id: row.get(16)?,
+        installment_count: row.get(17)?,
+        first_installment_cents: row.get(18)?,
     })
 }
 

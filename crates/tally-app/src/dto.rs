@@ -95,6 +95,11 @@ pub struct MovementDto {
     #[ts(type = "number")]
     pub amount_cents: i64,
     pub created_at: String,
+    pub installment_plan_id: Option<String>,
+    #[ts(type = "number | null")]
+    pub installment_count: Option<i64>,
+    #[ts(type = "number | null")]
+    pub first_installment_cents: Option<i64>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
@@ -217,6 +222,8 @@ pub struct CardSummaryDto {
     pub credit_limit_cents: Option<i64>,
     #[ts(type = "number")]
     pub debt_cents: i64,
+    #[ts(type = "number")]
+    pub credit_cents: i64,
     #[ts(type = "number | null")]
     pub available_limit_cents: Option<i64>,
     #[ts(type = "number")]
@@ -293,6 +300,8 @@ pub struct CardPaymentDto {
     pub entry_id: String,
     #[ts(type = "number")]
     pub amount_cents: i64,
+    #[ts(type = "number")]
+    pub unallocated_cents: i64,
     #[ts(type = "number")]
     pub initial_balance_cents: i64,
     pub occurred_on: String,

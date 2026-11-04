@@ -98,6 +98,9 @@
   const payments = $derived(paymentsQuery.data ?? []);
   const accounts = $derived(accountsQuery.data ?? []);
   const categories = $derived(categoriesQuery.data ?? []);
+  const hasUnallocated = $derived(
+    payments.some((payment) => payment.unallocated_cents > 0),
+  );
 
   const cards = $derived(card ? [card] : []);
   const loading = $derived(
@@ -246,6 +249,14 @@
           : formatCents(card.available_limit_cents)}
       </strong>
     </div>
+    {#if card.credit_cents > 0}
+      <div>
+        <span class="data-label">Crédito</span>
+        <strong class="summary-value amount-positive">
+          {formatCents(card.credit_cents)}
+        </strong>
+      </div>
+    {/if}
     <div class="summary-note">
       <span class="mono">
         vencido {formatCents(card.overdue_cents)} · mês{" "}
@@ -313,11 +324,21 @@
                   plan.id,
                   plan.description || plan.category_name,
                 )}
-              disabled={deletePlanMutation.isPending}
+              disabled={deletePlanMutation.isPending || plan.paid_cents > 0}
             >
               Excluir
             </button>
           </header>
+
+          {#if plan.paid_cents > 0}
+            <div class="inline-result inline-result--warn" role="status">
+              <span class="mono">BLOQUEADO</span>
+              <span>
+                Este parcelamento possui pagamentos. Remova os pagamentos antes
+                de excluir.
+              </span>
+            </div>
+          {/if}
 
           <div class="table-wrap">
             <table class="data-table">
@@ -325,6 +346,7 @@
                 <tr>
                   <th scope="col">#</th>
                   <th scope="col">Vencimento</th>
+                  <th scope="col">Período</th>
                   <th scope="col">Situação</th>
                   <th scope="col" class="align-right">Valor</th>
                   <th scope="col" class="align-right">Pago</th>
@@ -336,6 +358,7 @@
                   <tr>
                     <td class="mono">{installment.seq}</td>
                     <td>{formatDate(installment.due_on)}</td>
+                    <td>{periodLabel(plan.period)}</td>
                     <td>
                       <span
                         class="tag"
@@ -393,6 +416,7 @@
               <th scope="col">Origem</th>
               <th scope="col">Alocações</th>
               <th scope="col" class="align-right">Valor</th>
+              <th scope="col" class="align-right">Não alocado</th>
               <th scope="col" class="align-right">Ações</th>
             </tr>
           </thead>
@@ -409,6 +433,11 @@
                 <td class="mono align-right">
                   {formatCents(payment.amount_cents)}
                 </td>
+                <td class="mono align-right">
+                  {payment.unallocated_cents > 0
+                    ? formatCents(payment.unallocated_cents)
+                    : "—"}
+                </td>
                 <td class="align-right">
                   <button
                     type="button"
@@ -423,6 +452,16 @@
             {/each}
           </tbody>
         </table>
+      </div>
+    {/if}
+
+    {#if hasUnallocated}
+      <div class="inline-result" role="status">
+        <span class="mono">CRÉDITO</span>
+        <span>
+          A parte não alocada do pagamento fica como crédito no cartão e não vira
+          despesa.
+        </span>
       </div>
     {/if}
 

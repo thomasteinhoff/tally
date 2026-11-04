@@ -5,4 +5,4 @@
  * na conta principal: negativo para despesa/transferência de saída e para
  * ajustes negativos.
  */
-export type MovementDto = { id: string, kind: string, occurred_on: string, occurred_time: string | null, manual_period: string | null, period: string | null, description: string | null, primary_account_id: string, primary_account_name: string, counterparty_account_id: string | null, counterparty_account_name: string | null, category_id: string | null, category_name: string | null, payment_method: string | null, amount_cents: number, created_at: string, };
+export type MovementDto = { id: string, kind: string, occurred_on: string, occurred_time: string | null, manual_period: string | null, period: string | null, description: string | null, primary_account_id: string, primary_account_name: string, counterparty_account_id: string | null, counterparty_account_name: string | null, category_id: string | null, category_name: string | null, payment_method: string | null, amount_cents: number, created_at: string, installment_plan_id: string | null, installment_count: number | null, first_installment_cents: number | null, };

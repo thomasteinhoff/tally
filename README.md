@@ -107,4 +107,9 @@ src/              UI Svelte, rotas e formulários
 - Telas de cartões e detalhe do cartão com parcelamentos, parcelas e pagamentos.
 - Telas de parcelamentos com lista consolidada e detalhe do cronograma.
 - Reconhecimentos por parcela excluídos do livro de movimentações comuns; compras e pagamentos de cartão abrem a tela do cartão.
-- Testes financeiros de integração cobrindo os cenários críticos da fase.
+- Compra no cartão também disponível pelo fluxo geral de nova movimentação, com escolha de cartão e compra à vista ou parcelada.
+- Livro de movimentações mantém a compra parcelada em uma única linha, exibindo o total da compra, o resumo das parcelas e link para o parcelamento.
+- Período visível por parcela, herdado da compra.
+- Pagamento acima da dívida permanece não alocado, aparece como crédito no cartão e nunca vira despesa.
+- Exclusão de parcelamento com pagamentos bloqueada com explicação explícita na interface.
+- Testes financeiros de integração cobrindo os cenários críticos da fase, incluindo pagamento acima da dívida.

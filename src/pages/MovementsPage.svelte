@@ -11,16 +11,20 @@
   } from "../lib/api/bindings";
   import {
     createAdjustment,
+    createCardPurchase,
     createExpense,
     createIncome,
     createTransfer,
     deleteMovement,
     listAccounts,
+    listCards,
     listCategories,
     listMovements,
     updateMovement,
   } from "../lib/api";
+  import CardPurchaseModal from "../lib/components/CardPurchaseModal.svelte";
   import MovementFormModal from "../lib/components/MovementFormModal.svelte";
+  import Modal from "../lib/components/Modal.svelte";
   import { confirmAction } from "../lib/confirm";
   import { normalizeError } from "../lib/errors";
   import {
@@ -46,6 +50,8 @@
     to: "",
   });
   let composerOpen = $state(false);
+  let chooserOpen = $state(false);
+  let cardComposerOpen = $state(false);
   let editing = $state<MovementDto | null>(null);
   let startedTime = $state("");
   let deleteError = $state<string | null>(null);
@@ -74,6 +80,11 @@
     queryFn: () => listMovements(filter),
   }));
 
+  const cardsQuery = createQuery(() => ({
+    queryKey: ["cards"],
+    queryFn: listCards,
+  }));
+
   const saveMutation = createMutation(() => ({
     mutationFn: (request: SaveMovementRequest) => saveRequest(request),
     onSuccess: () => {
@@ -93,8 +104,22 @@
     },
   }));
 
+  const cardPurchaseMutation = createMutation(() => ({
+    mutationFn: createCardPurchase,
+    onSuccess: () => {
+      void queryClient.invalidateQueries();
+      cardComposerOpen = false;
+      notify("Compra lançada.");
+    },
+  }));
+
   const saveError = $derived(
     saveMutation.error ? normalizeError(saveMutation.error).message : null,
+  );
+  const cardPurchaseError = $derived(
+    cardPurchaseMutation.error
+      ? normalizeError(cardPurchaseMutation.error).message
+      : null,
   );
   const queryError = $derived(
     movementsQuery.error ? normalizeError(movementsQuery.error) : null,
@@ -102,6 +127,9 @@
 
   const accounts = $derived(accountsQuery.data ?? []);
   const categories = $derived(categoriesQuery.data ?? []);
+  const cards = $derived(
+    (cardsQuery.data ?? []).filter((card) => !card.archived_at),
+  );
   const movements = $derived(movementsQuery.data ?? []);
   const editableKinds = new Set([
     "expense",
@@ -120,6 +148,24 @@
     return null;
   }
 
+  function cardPurchaseSummary(movement: MovementDto): string | null {
+    if (movement.kind !== "card_purchase" || !movement.installment_count) {
+      return null;
+    }
+    const count = movement.installment_count;
+    if (count === 1) {
+      return "À vista · total da compra";
+    }
+    const total = Math.abs(movement.amount_cents);
+    const first = movement.first_installment_cents;
+    if (first === null) {
+      return `${count}x · total da compra`;
+    }
+    return first * count === total
+      ? `${count}x de ${formatCents(first)} · total da compra`
+      : `${count}x a partir de ${formatCents(first)} · total da compra`;
+  }
+
   $effect(() => {
     if (uiState.openNewMovementRequested) {
       uiState.openNewMovementRequested = false;
@@ -130,8 +176,27 @@
   function openNew(): void {
     editing = null;
     startedTime = currentTime();
-    composerOpen = true;
     saveMutation.reset();
+    cardPurchaseMutation.reset();
+    chooserOpen = true;
+  }
+
+  function startSimple(): void {
+    chooserOpen = false;
+    composerOpen = true;
+  }
+
+  function startCard(): void {
+    chooserOpen = false;
+    cardComposerOpen = true;
+  }
+
+  function closeCardComposer(): void {
+    if (cardPurchaseMutation.isPending) {
+      return;
+    }
+    cardComposerOpen = false;
+    cardPurchaseMutation.reset();
   }
 
   function openEdit(movement: MovementDto): void {
@@ -252,14 +317,22 @@
     <h2>Movimentações</h2>
     <p>
       Despesas, receitas, transferências e ajustes publicados em partidas
-      dobradas. Compras e pagamentos de cartão também aparecem, mas são
-      gerenciados na tela do cartão.
+      dobradas. Compras à vista ou parceladas no cartão também são lançadas por
+      aqui.
     </p>
   </div>
   <button type="button" class="button button--primary" onclick={openNew}>
     Nova movimentação
   </button>
 </section>
+
+<div class="inline-result">
+  <span class="mono">CARTÃO</span>
+  <span>
+    Compras no cartão aparecem no livro pelo valor total da compra. A despesa
+    reconhecida é apenas a parcela do período.
+  </span>
+</div>
 
 <section class="panel" aria-labelledby="movement-filter-title">
   <header class="panel-header">
@@ -402,6 +475,9 @@
                   {#if movement.description}
                     <small class="mono">{kindLabel(movement.kind)}</small>
                   {/if}
+                  {#if cardPurchaseSummary(movement)}
+                    <small class="mono">{cardPurchaseSummary(movement)}</small>
+                  {/if}
                 </div>
               </td>
               <td>
@@ -426,6 +502,9 @@
                 class:amount-positive={movement.amount_cents > 0}
               >
                 {formatCents(movement.amount_cents)}
+                {#if movement.kind === "card_purchase"}
+                  <br /><small>total da compra</small>
+                {/if}
               </td>
               <td class="align-right">
                 <div class="row-actions">
@@ -446,6 +525,14 @@
                       Excluir
                     </button>
                   {:else if cardHref(movement)}
+                    {#if movement.installment_plan_id}
+                      <a
+                        class="button button--small"
+                        href="#/parcelamentos/{movement.installment_plan_id}"
+                      >
+                        Parcelamento
+                      </a>
+                    {/if}
                     <a class="button button--small" href={cardHref(movement)}>
                       Cartão
                     </a>
@@ -471,6 +558,34 @@
     </div>
   {/if}
 </section>
+
+{#if chooserOpen}
+  <Modal title="Nova movimentação" onclose={() => (chooserOpen = false)}>
+    <p class="form-hint">
+      Escolha se o lançamento é uma movimentação simples ou uma compra no
+      cartão, à vista ou parcelada.
+    </p>
+    <footer class="form-actions">
+      <button type="button" class="button" onclick={startSimple}>
+        Despesa, receita ou transferência
+      </button>
+      <button type="button" class="button button--primary" onclick={startCard}>
+        Compra no cartão
+      </button>
+    </footer>
+  </Modal>
+{/if}
+
+{#if cardComposerOpen}
+  <CardPurchaseModal
+    cards={cards}
+    {categories}
+    saving={cardPurchaseMutation.isPending}
+    error={cardPurchaseError}
+    onsave={(input) => cardPurchaseMutation.mutate(input)}
+    onclose={closeCardComposer}
+  />
+{/if}
 
 {#if composerOpen}
   {#key editing?.id ?? "new"}

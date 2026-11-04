@@ -810,6 +810,7 @@ fn fetch_card_summary(
         |row| row.get(0),
     )?;
     let debt_cents = (-balance_cents).max(0);
+    let credit_cents = balance_cents.max(0);
 
     let initial_total: i64 = connection.query_row(
         "SELECT COALESCE(-SUM(p.amount_cents), 0)
@@ -876,6 +877,7 @@ fn fetch_card_summary(
         archived_at,
         credit_limit_cents,
         debt_cents,
+        credit_cents,
         available_limit_cents,
         initial_debt_cents,
         overdue_cents,
@@ -909,6 +911,7 @@ fn fetch_payment(
                     bank_account_name: row.get(4)?,
                     entry_id: row.get(5)?,
                     amount_cents: row.get(6)?,
+                    unallocated_cents: 0,
                     initial_balance_cents: row.get(7)?,
                     occurred_on: row.get(8)?,
                     occurred_time: row.get(9)?,
@@ -946,6 +949,13 @@ fn fetch_payment(
     };
 
     Ok(Some(CardPaymentDto {
+        unallocated_cents: (payment.amount_cents
+            - payment.initial_balance_cents
+            - allocations
+                .iter()
+                .map(|allocation| allocation.amount_cents)
+                .sum::<i64>())
+        .max(0),
         allocations,
         ..payment
     }))

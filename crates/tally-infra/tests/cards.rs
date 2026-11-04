@@ -240,6 +240,58 @@ async fn payment_reduces_debt_and_never_becomes_an_expense() {
 }
 
 #[tokio::test]
+async fn overpayment_stays_unallocated_and_never_becomes_an_expense() {
+    let fixture = fixture().await;
+    let bank_id = account(&fixture, "Banco", 100_000).await;
+    let card_id = card(&fixture, "Cartao", 0, Some(500_000)).await;
+    let category_id = category(&fixture, "Compras").await;
+
+    fixture
+        .cards
+        .create_purchase(purchase_input(
+            &card_id,
+            &category_id,
+            90_000,
+            3,
+            "2035-02-10",
+        ))
+        .await
+        .expect("purchase should work");
+    let expense_before = recognized_expense(&fixture).await;
+
+    let payment = fixture
+        .cards
+        .create_payment(payment_input(&card_id, &bank_id, 100_000, "2026-03-05"))
+        .await
+        .expect("payment should work");
+
+    assert_eq!(
+        payment
+            .allocations
+            .iter()
+            .map(|allocation| allocation.amount_cents)
+            .sum::<i64>(),
+        90_000
+    );
+    assert_eq!(payment.unallocated_cents, 10_000);
+    assert_eq!(recognized_expense(&fixture).await, expense_before);
+    assert_eq!(
+        scalar(
+            &fixture,
+            "SELECT COUNT(*) FROM journal_entries WHERE kind = 'expense' AND posted_at IS NOT NULL",
+        )
+        .await,
+        3
+    );
+
+    let summary = fixture.cards.card_summary(&card_id).await.expect("summary");
+    assert_eq!(summary.debt_cents, 0);
+    assert_eq!(summary.credit_cents, 10_000);
+    assert_eq!(summary.available_limit_cents, Some(500_000));
+    assert_eq!(net_worth(&fixture).await, 10_000);
+}
+
+#[tokio::test]
 async fn payment_is_fifo_and_covers_the_initial_debt_first() {
     let fixture = fixture().await;
     let bank_id = account(&fixture, "Banco", 200_000).await;
@@ -694,6 +746,10 @@ async fn recognized_entries_stay_out_of_the_movements_list() {
     assert_eq!(movements.len(), 1);
     assert_eq!(movements[0].kind, "card_purchase");
     assert_eq!(movements[0].category_id, None);
+    assert_eq!(movements[0].amount_cents, -90_000);
+    assert_eq!(movements[0].installment_count, Some(3));
+    assert_eq!(movements[0].first_installment_cents, Some(30_000));
+    assert!(movements[0].installment_plan_id.is_some());
     assert_eq!(
         scalar(
             &fixture,

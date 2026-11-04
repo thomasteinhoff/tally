@@ -138,6 +138,16 @@
     </div>
   </section>
 
+  {#if plan.paid_cents > 0}
+    <div class="inline-result inline-result--warn" role="status">
+      <span class="mono">BLOQUEADO</span>
+      <span>
+        Este parcelamento possui pagamentos. Remova os pagamentos no cartão
+        antes de excluir.
+      </span>
+    </div>
+  {/if}
+
   <section class="panel" aria-labelledby="installments-title">
     <header class="panel-header">
       <div class="panel-heading">
@@ -153,6 +163,7 @@
           <tr>
             <th scope="col">#</th>
             <th scope="col">Vencimento</th>
+            <th scope="col">Período</th>
             <th scope="col">Situação</th>
             <th scope="col" class="align-right">Valor</th>
             <th scope="col" class="align-right">Pago</th>
@@ -164,6 +175,7 @@
             <tr>
               <td class="mono">{installment.seq}</td>
               <td>{formatDate(installment.due_on)}</td>
+              <td>{periodLabel(plan.period)}</td>
               <td>
                 <span
                   class="tag"

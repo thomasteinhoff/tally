@@ -558,6 +558,9 @@ mod tests {
                     .map(|value| value.as_str().to_owned()),
                 amount_cents: -100,
                 created_at: "2026-10-31T12:00:00Z".to_owned(),
+                installment_plan_id: None,
+                installment_count: None,
+                first_installment_cents: None,
             })
         }
 

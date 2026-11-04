@@ -45,6 +45,7 @@
 
   let cardId = $state(initial.cardId);
   let amountText = $state("");
+  let paymentMode = $state<"cash" | "installments">("cash");
   let installmentCount = $state(1);
   let firstDueOn = $state(initial.firstDueOn);
   let occurredOn = $state(initial.occurredOn);
@@ -76,15 +77,20 @@
       localError = "Informe um valor maior que zero.";
       return;
     }
-    if (!Number.isInteger(installmentCount) || installmentCount < 1) {
+    const count = paymentMode === "cash" ? 1 : installmentCount;
+    if (paymentMode === "installments" && count < 2) {
+      localError = "A compra parcelada precisa de pelo menos 2 parcelas.";
+      return;
+    }
+    if (!Number.isInteger(count) || count < 1) {
       localError = "A quantidade de parcelas deve começar em 1.";
       return;
     }
-    if (installmentCount > 60) {
+    if (count > 60) {
       localError = "O máximo é 60 parcelas.";
       return;
     }
-    if (installmentCount > totalCents) {
+    if (count > totalCents) {
       localError = "Cada parcela precisa ter pelo menos um centavo.";
       return;
     }
@@ -115,7 +121,7 @@
       card_account_id: cardId,
       category_id: categoryId,
       total_cents: totalCents,
-      installment_count: installmentCount,
+      installment_count: count,
       first_due_on: firstDueOn,
       occurred_on: occurredOn,
       occurred_time: normalizedTime || null,
@@ -146,9 +152,37 @@
       </label>
 
       <label class="field">
+        <span>Forma</span>
+        <select
+          bind:value={paymentMode}
+          onchange={() => {
+            if (paymentMode === "installments" && installmentCount < 2) {
+              installmentCount = 2;
+            }
+          }}
+        >
+          <option value="cash">À vista</option>
+          <option value="installments">Parcelada</option>
+        </select>
+      </label>
+
+      <label class="field">
         <span>Data da compra</span>
         <input type="date" bind:value={occurredOn} required />
       </label>
+
+      {#if paymentMode === "installments"}
+        <label class="field">
+          <span>Parcelas</span>
+          <input
+            type="number"
+            min="2"
+            max="60"
+            bind:value={installmentCount}
+            required
+          />
+        </label>
+      {/if}
 
       <label class="field field--wide">
         <span>Valor total <small>use vírgula para centavos</small></span>
@@ -162,18 +196,9 @@
       </label>
 
       <label class="field">
-        <span>Parcelas</span>
-        <input
-          type="number"
-          min="1"
-          max="60"
-          bind:value={installmentCount}
-          required
-        />
-      </label>
-
-      <label class="field">
-        <span>Primeira parcela</span>
+        <span>
+          {paymentMode === "cash" ? "Vencimento" : "Primeira parcela"}
+        </span>
         <input type="date" bind:value={firstDueOn} required />
       </label>
 

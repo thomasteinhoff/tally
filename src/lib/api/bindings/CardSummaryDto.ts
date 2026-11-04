@@ -3,4 +3,4 @@
 /**
  * Situação agregada de um cartão. Valores de dívida são positivos.
  */
-export type CardSummaryDto = { id: string, name: string, archived_at: string | null, credit_limit_cents: number | null, debt_cents: number, available_limit_cents: number | null, initial_debt_cents: number, overdue_cents: number, current_month_cents: number, future_cents: number, over_limit: boolean, };
+export type CardSummaryDto = { id: string, name: string, archived_at: string | null, credit_limit_cents: number | null, debt_cents: number, credit_cents: number, available_limit_cents: number | null, initial_debt_cents: number, overdue_cents: number, current_month_cents: number, future_cents: number, over_limit: boolean, };
