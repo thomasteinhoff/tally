@@ -82,7 +82,19 @@ pub fn run() {
             commands::delete_installment_plan,
             commands::create_card_payment,
             commands::list_card_payments,
-            commands::delete_card_payment
+            commands::delete_card_payment,
+            commands::get_dashboard,
+            commands::get_spending_report,
+            commands::get_income_report,
+            commands::get_cash_flow_report,
+            commands::get_net_worth_report,
+            commands::get_commitments_report,
+            commands::create_backup,
+            commands::list_backups,
+            commands::restore_backup,
+            commands::export_csv,
+            commands::get_settings,
+            commands::update_settings
         ])
         .run(tauri::generate_context!())
         .expect("erro ao executar o Tally");

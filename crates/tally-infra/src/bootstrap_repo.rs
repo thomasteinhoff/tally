@@ -62,6 +62,25 @@ impl BootstrapRepository for SqliteBootstrapRepository {
         })
     }
 
+    async fn update_settings(&self, backup_retention: u32) -> Result<SettingsDto, AppError> {
+        let value = backup_retention.to_string();
+        self.db
+            .call(move |connection| {
+                connection.execute(
+                    "INSERT INTO settings (key, value, updated_at)
+                     VALUES ('backup_retention', ?1, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+                     ON CONFLICT(key) DO UPDATE SET
+                         value = excluded.value,
+                         updated_at = excluded.updated_at",
+                    [value],
+                )?;
+                Ok(())
+            })
+            .await?;
+
+        self.settings().await
+    }
+
     async fn system_account_count(&self) -> Result<i64, AppError> {
         self.db
             .call(|connection| {
@@ -78,10 +97,28 @@ impl BootstrapRepository for SqliteBootstrapRepository {
         let issues = self
             .db
             .call(|connection| {
-                let mut statement = connection.prepare("PRAGMA integrity_check")?;
-                let rows = statement.query_map([], |row| row.get::<_, String>(0))?;
+                let mut issues = {
+                    let mut statement = connection.prepare("PRAGMA integrity_check")?;
+                    let rows = statement.query_map([], |row| row.get::<_, String>(0))?;
+                    rows.collect::<rusqlite::Result<Vec<_>>>()?
+                };
 
-                rows.collect::<rusqlite::Result<Vec<_>>>()
+                let mut statement = connection.prepare("PRAGMA foreign_key_check")?;
+                let rows = statement.query_map([], |row| {
+                    Ok(format!(
+                        "foreign key: tabela {} linha {} referencia {}",
+                        row.get::<_, String>(0)?,
+                        row.get::<_, Option<i64>>(1)?
+                            .map(|rowid| rowid.to_string())
+                            .unwrap_or_else(|| "?".to_owned()),
+                        row.get::<_, String>(2)?
+                    ))
+                })?;
+                for row in rows {
+                    issues.push(row?);
+                }
+
+                Ok(issues)
             })
             .await?;
 

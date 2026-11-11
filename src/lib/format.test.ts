@@ -4,6 +4,7 @@ import {
   formatAmountInput,
   formatCents,
   formatDate,
+  formatMonth,
   movementAmountForInput,
   normalizeTimeInput,
   parseAmountToCents,
@@ -75,6 +76,8 @@ describe("formatação de apoio", () => {
   it("formata datas ISO e períodos do domínio", () => {
     expect(formatDate("2026-10-31")).toBe("31/10/2026");
     expect(formatDate("31/10/2026")).toBe("31/10/2026");
+    expect(formatMonth("2026-10")).toBe("10/2026");
+    expect(formatMonth("2026-10-31")).toBe("2026-10-31");
     expect(periodLabel("madrugada")).toBe("Madrugada");
     expect(periodLabel(null)).toBe("—");
   });

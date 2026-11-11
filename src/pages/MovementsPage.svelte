@@ -46,6 +46,7 @@
     categoryId: "",
     kind: "",
     period: "",
+    paymentMethod: "",
     from: "",
     to: "",
   });
@@ -61,6 +62,7 @@
     category_id: filters.categoryId || null,
     kind: filters.kind || null,
     period: filters.period || null,
+    payment_method: filters.paymentMethod || null,
     from: filters.from || null,
     to: filters.to || null,
   });
@@ -221,6 +223,7 @@
       categoryId: "",
       kind: "",
       period: "",
+      paymentMethod: "",
       from: "",
       to: "",
     };
@@ -386,6 +389,18 @@
         <option value="tarde">Tarde</option>
         <option value="noite">Noite</option>
         <option value="custom">Personalizado</option>
+      </select>
+    </label>
+
+    <label class="field">
+      <span>Forma de pagamento</span>
+      <select bind:value={filters.paymentMethod}>
+        <option value="">Todas</option>
+        <option value="pix">Pix</option>
+        <option value="debit">Débito</option>
+        <option value="credit">Crédito</option>
+        <option value="subscription_credit">Crédito recorrente</option>
+        <option value="cash">Dinheiro</option>
       </select>
     </label>
 

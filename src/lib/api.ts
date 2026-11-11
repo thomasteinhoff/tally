@@ -3,10 +3,14 @@ import { invoke } from "@tauri-apps/api/core";
 import type {
   AccountDto,
   AccountStatementDto,
+  BackupDto,
   BootstrapDto,
   CardPaymentDto,
   CardSummaryDto,
+  CashFlowReportDto,
   CategoryDto,
+  CategoryReportDto,
+  CommitmentsReportDto,
   CreateAccountInput,
   CreateAdjustmentInput,
   CreateCardPaymentInput,
@@ -15,11 +19,19 @@ import type {
   CreateExpenseInput,
   CreateIncomeInput,
   CreateTransferInput,
+  CsvExportDto,
+  DashboardDto,
+  ExportCsvInput,
   InstallmentPlanDto,
   IntegrityReportDto,
   MovementDto,
   MovementFilter,
+  NetWorthReportDto,
+  ReportFilter,
+  RestoreResultDto,
+  SettingsDto,
   UpdateMovementInput,
+  UpdateSettingsInput,
 } from "./api/bindings";
 
 export function getBootstrap(): Promise<BootstrapDto> {
@@ -177,4 +189,68 @@ export function listCardPayments(
 
 export function deleteCardPayment(paymentId: string): Promise<void> {
   return invoke<void>("delete_card_payment", { paymentId });
+}
+
+export function getDashboard(): Promise<DashboardDto> {
+  return invoke<DashboardDto>("get_dashboard");
+}
+
+export function getSpendingReport(
+  filter: ReportFilter,
+): Promise<CategoryReportDto> {
+  return invoke<CategoryReportDto>("get_spending_report", { filter });
+}
+
+export function getIncomeReport(
+  filter: ReportFilter,
+): Promise<CategoryReportDto> {
+  return invoke<CategoryReportDto>("get_income_report", { filter });
+}
+
+export function getCashFlowReport(
+  filter: ReportFilter,
+): Promise<CashFlowReportDto> {
+  return invoke<CashFlowReportDto>("get_cash_flow_report", { filter });
+}
+
+export function getNetWorthReport(
+  asOf: string | null = null,
+): Promise<NetWorthReportDto> {
+  return invoke<NetWorthReportDto>("get_net_worth_report", { asOf });
+}
+
+export function getCommitmentsReport(
+  asOf: string | null = null,
+  months: number | null = null,
+): Promise<CommitmentsReportDto> {
+  return invoke<CommitmentsReportDto>("get_commitments_report", {
+    asOf,
+    months,
+  });
+}
+
+export function createBackup(): Promise<BackupDto> {
+  return invoke<BackupDto>("create_backup");
+}
+
+export function listBackups(): Promise<BackupDto[]> {
+  return invoke<BackupDto[]>("list_backups");
+}
+
+export function restoreBackup(fileName: string): Promise<RestoreResultDto> {
+  return invoke<RestoreResultDto>("restore_backup", { fileName });
+}
+
+export function exportCsv(input: ExportCsvInput): Promise<CsvExportDto> {
+  return invoke<CsvExportDto>("export_csv", { input });
+}
+
+export function getSettings(): Promise<SettingsDto> {
+  return invoke<SettingsDto>("get_settings");
+}
+
+export function updateSettings(
+  input: UpdateSettingsInput,
+): Promise<SettingsDto> {
+  return invoke<SettingsDto>("update_settings", { input });
 }

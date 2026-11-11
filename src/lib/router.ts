@@ -8,6 +8,7 @@ export type Route =
   | { name: "installments" }
   | { name: "installment"; planId: string }
   | { name: "categories" }
+  | { name: "reports" }
   | { name: "settings" }
   | { name: "unavailable"; path: string };
 
@@ -32,6 +33,8 @@ export function parseRoute(hash: string): Route {
         return { name: "installments" };
       case "categorias":
         return { name: "categories" };
+      case "relatorios":
+        return { name: "reports" };
       case "configuracoes":
         return { name: "settings" };
       default:
@@ -74,6 +77,8 @@ export function routeHref(route: Route): string {
       return `#/parcelamentos/${encodeURIComponent(route.planId)}`;
     case "categories":
       return "#/categorias";
+    case "reports":
+      return "#/relatorios";
     case "settings":
       return "#/configuracoes";
     case "unavailable":

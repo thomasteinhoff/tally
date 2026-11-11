@@ -23,6 +23,7 @@ describe("parseRoute", () => {
       planId: "abc 123",
     });
     expect(parseRoute("#/categorias")).toEqual({ name: "categories" });
+    expect(parseRoute("#/relatorios")).toEqual({ name: "reports" });
     expect(parseRoute("#/configuracoes")).toEqual({ name: "settings" });
   });
 
@@ -30,9 +31,9 @@ describe("parseRoute", () => {
     expect(parseRoute("#/movimentacoes?foo=1")).toEqual({
       name: "movements",
     });
-    expect(parseRoute("#/relatorios")).toEqual({
+    expect(parseRoute("#/desconhecido")).toEqual({
       name: "unavailable",
-      path: "/relatorios",
+      path: "/desconhecido",
     });
     expect(parseRoute("#/contas/a/b")).toEqual({
       name: "unavailable",
@@ -58,6 +59,7 @@ describe("routeHref", () => {
       "#/parcelamentos/a%20b",
     );
     expect(routeHref({ name: "categories" })).toBe("#/categorias");
+    expect(routeHref({ name: "reports" })).toBe("#/relatorios");
     expect(routeHref({ name: "settings" })).toBe("#/configuracoes");
     expect(routeHref({ name: "unavailable", path: "/x" })).toBe("#/x");
   });

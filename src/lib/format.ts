@@ -94,6 +94,11 @@ export function formatDate(isoDate: string): string {
   return match ? `${match[3]}/${match[2]}/${match[1]}` : isoDate;
 }
 
+export function formatMonth(isoMonth: string): string {
+  const match = /^(\d{4})-(\d{2})$/.exec(isoMonth);
+  return match ? `${match[2]}/${match[1]}` : isoMonth;
+}
+
 export function todayIso(): string {
   const now = new Date();
   const month = String(now.getMonth() + 1).padStart(2, "0");

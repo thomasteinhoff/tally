@@ -1,14 +1,17 @@
 use tally_app::{
-    AccountDto, AccountStatementDto, AccountsService, AppError, BootstrapDto, BootstrapService,
-    CardPaymentDto, CardSummaryDto, CardsService, CategoriesService, CategoryDto,
-    CreateAccountInput, CreateAdjustmentInput, CreateCardPaymentInput, CreateCardPurchaseInput,
-    CreateCategoryInput, CreateExpenseInput, CreateIncomeInput, CreateTransferInput,
-    InstallmentPlanDto, IntegrityReportDto, MovementDto, MovementFilter, MovementsService,
-    UpdateMovementInput,
+    AccountDto, AccountStatementDto, AccountsService, AppError, BackupDto, BootstrapDto,
+    BootstrapService, CardPaymentDto, CardSummaryDto, CardsService, CashFlowReportDto,
+    CategoriesService, CategoryDto, CategoryReportDto, CommitmentsReportDto, CreateAccountInput,
+    CreateAdjustmentInput, CreateCardPaymentInput, CreateCardPurchaseInput, CreateCategoryInput,
+    CreateExpenseInput, CreateIncomeInput, CreateTransferInput, CsvExportDto, DashboardDto,
+    ExportCsvInput, InstallmentPlanDto, IntegrityReportDto, MovementDto, MovementFilter,
+    MovementsService, NetWorthReportDto, ReportFilter, ReportsService, RestoreResultDto,
+    SettingsDto, UpdateMovementInput, UpdateSettingsInput,
 };
 use tally_infra::{
-    Database, SqliteAccountsRepository, SqliteBootstrapRepository, SqliteCardsRepository,
-    SqliteCategoriesRepository, SqliteMovementsRepository,
+    DataTools, Database, SqliteAccountsRepository, SqliteBootstrapRepository,
+    SqliteCardsRepository, SqliteCategoriesRepository, SqliteMovementsRepository,
+    SqliteReportsRepository,
 };
 use tauri::State;
 
@@ -53,34 +56,57 @@ fn cards_service(state: &AppState) -> Result<CardsService<SqliteCardsRepository>
     Ok(CardsService::new(SqliteCardsRepository::new(db)))
 }
 
-#[tauri::command]
-pub async fn get_bootstrap(state: State<'_, AppState>) -> Result<BootstrapDto, AppError> {
-    let db = database(state.inner())?;
-    let repository = SqliteBootstrapRepository::new(db);
-    let service = BootstrapService::new(
-        repository,
+fn reports_service(state: &AppState) -> Result<ReportsService<SqliteReportsRepository>, AppError> {
+    let db = database(state)?;
+    Ok(ReportsService::new(SqliteReportsRepository::new(db)))
+}
+
+fn data_tools(state: &AppState) -> Result<DataTools, AppError> {
+    let db = database(state)?;
+    Ok(DataTools::new(
+        db,
+        state.paths.backups.clone(),
+        state.paths.exports.clone(),
+    ))
+}
+
+fn bootstrap_service(
+    state: &AppState,
+) -> Result<BootstrapService<SqliteBootstrapRepository>, AppError> {
+    let db = database(state)?;
+    Ok(BootstrapService::new(
+        SqliteBootstrapRepository::new(db),
         state.app_version.clone(),
         state.paths.db_path.display().to_string(),
         state.paths.root.display().to_string(),
-    );
+    ))
+}
 
-    service.bootstrap().await
+#[tauri::command]
+pub async fn get_bootstrap(state: State<'_, AppState>) -> Result<BootstrapDto, AppError> {
+    bootstrap_service(state.inner())?.bootstrap().await
 }
 
 #[tauri::command]
 pub async fn run_integrity_check(
     state: State<'_, AppState>,
 ) -> Result<IntegrityReportDto, AppError> {
-    let db = database(state.inner())?;
-    let repository = SqliteBootstrapRepository::new(db);
-    let service = BootstrapService::new(
-        repository,
-        state.app_version.clone(),
-        state.paths.db_path.display().to_string(),
-        state.paths.root.display().to_string(),
-    );
+    bootstrap_service(state.inner())?.integrity_check().await
+}
 
-    service.integrity_check().await
+#[tauri::command]
+pub async fn get_settings(state: State<'_, AppState>) -> Result<SettingsDto, AppError> {
+    bootstrap_service(state.inner())?.settings().await
+}
+
+#[tauri::command]
+pub async fn update_settings(
+    state: State<'_, AppState>,
+    input: UpdateSettingsInput,
+) -> Result<SettingsDto, AppError> {
+    bootstrap_service(state.inner())?
+        .update_settings(input)
+        .await
 }
 
 #[tauri::command]
@@ -316,4 +342,90 @@ pub async fn delete_card_payment(
     cards_service(state.inner())?
         .delete_payment(&payment_id)
         .await
+}
+
+#[tauri::command]
+pub async fn get_dashboard(state: State<'_, AppState>) -> Result<DashboardDto, AppError> {
+    reports_service(state.inner())?.dashboard().await
+}
+
+#[tauri::command]
+pub async fn get_spending_report(
+    state: State<'_, AppState>,
+    filter: ReportFilter,
+) -> Result<CategoryReportDto, AppError> {
+    reports_service(state.inner())?.spending(filter).await
+}
+
+#[tauri::command]
+pub async fn get_income_report(
+    state: State<'_, AppState>,
+    filter: ReportFilter,
+) -> Result<CategoryReportDto, AppError> {
+    reports_service(state.inner())?.income(filter).await
+}
+
+#[tauri::command]
+pub async fn get_cash_flow_report(
+    state: State<'_, AppState>,
+    filter: ReportFilter,
+) -> Result<CashFlowReportDto, AppError> {
+    reports_service(state.inner())?.cash_flow(filter).await
+}
+
+#[tauri::command]
+pub async fn get_net_worth_report(
+    state: State<'_, AppState>,
+    as_of: Option<String>,
+) -> Result<NetWorthReportDto, AppError> {
+    reports_service(state.inner())?.net_worth(as_of).await
+}
+
+#[tauri::command]
+pub async fn get_commitments_report(
+    state: State<'_, AppState>,
+    as_of: Option<String>,
+    months: Option<u32>,
+) -> Result<CommitmentsReportDto, AppError> {
+    reports_service(state.inner())?
+        .commitments(as_of, months)
+        .await
+}
+
+#[tauri::command]
+pub async fn create_backup(state: State<'_, AppState>) -> Result<BackupDto, AppError> {
+    data_tools(state.inner())?.create_backup().await
+}
+
+#[tauri::command]
+pub async fn list_backups(state: State<'_, AppState>) -> Result<Vec<BackupDto>, AppError> {
+    data_tools(state.inner())?.list_backups()
+}
+
+#[tauri::command]
+pub async fn restore_backup(
+    state: State<'_, AppState>,
+    file_name: String,
+) -> Result<RestoreResultDto, AppError> {
+    data_tools(state.inner())?.restore_backup(&file_name).await
+}
+
+#[tauri::command]
+pub async fn export_csv(
+    state: State<'_, AppState>,
+    input: ExportCsvInput,
+) -> Result<CsvExportDto, AppError> {
+    let movements = movements_service(state.inner())?
+        .list(Some(MovementFilter {
+            account_id: input.account_id,
+            category_id: input.category_id,
+            kind: input.kind,
+            period: input.period,
+            payment_method: input.payment_method,
+            from: input.from,
+            to: input.to,
+        }))
+        .await?;
+
+    data_tools(state.inner())?.export_movements(&movements)
 }

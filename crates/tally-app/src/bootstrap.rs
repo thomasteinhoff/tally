@@ -44,6 +44,23 @@ impl<R: BootstrapRepository> BootstrapService<R> {
     pub async fn integrity_check(&self) -> Result<IntegrityReportDto, AppError> {
         self.repo.integrity_check().await
     }
+
+    pub async fn settings(&self) -> Result<crate::dto::SettingsDto, AppError> {
+        self.repo.settings().await
+    }
+
+    pub async fn update_settings(
+        &self,
+        input: crate::dto::UpdateSettingsInput,
+    ) -> Result<crate::dto::SettingsDto, AppError> {
+        if input.backup_retention == 0 {
+            return Err(AppError::validation(
+                "mantenha pelo menos um backup na retenção",
+            ));
+        }
+
+        self.repo.update_settings(input.backup_retention).await
+    }
 }
 
 #[cfg(test)]
@@ -65,6 +82,14 @@ mod tests {
         async fn settings(&self) -> Result<SettingsDto, AppError> {
             Ok(SettingsDto {
                 backup_retention: 10,
+                first_run_completed: false,
+                last_backup_at: None,
+            })
+        }
+
+        async fn update_settings(&self, backup_retention: u32) -> Result<SettingsDto, AppError> {
+            Ok(SettingsDto {
+                backup_retention,
                 first_run_completed: false,
                 last_backup_at: None,
             })

@@ -14,6 +14,7 @@
   import InstallmentsPage from "./pages/InstallmentsPage.svelte";
   import MovementsPage from "./pages/MovementsPage.svelte";
   import OverviewPage from "./pages/OverviewPage.svelte";
+  import ReportsPage from "./pages/ReportsPage.svelte";
   import SettingsPage from "./pages/SettingsPage.svelte";
   import StatementPage from "./pages/StatementPage.svelte";
 
@@ -65,9 +66,11 @@
                     ? "Parcelamento"
                     : route.name === "categories"
                       ? "Categorias"
-                      : route.name === "settings"
-                        ? "Configurações"
-                        : "Rota indisponível",
+                      : route.name === "reports"
+                        ? "Relatórios"
+                        : route.name === "settings"
+                          ? "Configurações"
+                          : "Rota indisponível",
   );
 
   function active(section: string): boolean {
@@ -173,9 +176,14 @@
         >
           Categorias
         </a>
-        <span class="nav-item is-disabled" aria-disabled="true" title="Fase futura">
+        <a
+          class="nav-item"
+          class:is-active={active("reports")}
+          aria-current={active("reports") ? "page" : undefined}
+          href="#/relatorios"
+        >
           Relatórios
-        </span>
+        </a>
         <a
           class="nav-item"
           class:is-active={active("settings")}
@@ -204,7 +212,7 @@
   <main class="main">
     <header class="topbar">
       <div class="topbar-left">
-        <span class="eyebrow">Tally / Phase 2</span>
+        <span class="eyebrow">Tally / Phase 3</span>
         <h1>{pageTitle}</h1>
       </div>
       <div class="topbar-right">
@@ -251,6 +259,8 @@
         <InstallmentDetailPage planId={route.planId} />
       {:else if route.name === "categories"}
         <CategoriesPage />
+      {:else if route.name === "reports"}
+        <ReportsPage />
       {:else if route.name === "settings"}
         <SettingsPage />
       {:else}

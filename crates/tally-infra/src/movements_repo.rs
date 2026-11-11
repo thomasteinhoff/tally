@@ -190,14 +190,16 @@ impl MovementsRepository for SqliteMovementsRepository {
              AND (?2 IS NULL OR e.category_id = ?2)
              AND (?3 IS NULL OR e.kind = ?3)
              AND (?4 IS NULL OR e.period = ?4)
-             AND (?5 IS NULL OR e.occurred_on >= ?5)
-             AND (?6 IS NULL OR e.occurred_on <= ?6)
+             AND (?5 IS NULL OR e.payment_method = ?5)
+             AND (?6 IS NULL OR e.occurred_on >= ?6)
+             AND (?7 IS NULL OR e.occurred_on <= ?7)
              ORDER BY e.occurred_on DESC, e.created_at DESC, e.id DESC"
         );
         let account_id = filter.account_id;
         let category_id = filter.category_id;
         let kind = filter.kind;
         let period = filter.period;
+        let payment_method = filter.payment_method;
         let from = filter.from;
         let to = filter.to;
 
@@ -210,6 +212,7 @@ impl MovementsRepository for SqliteMovementsRepository {
                         category_id.as_deref(),
                         kind.as_deref(),
                         period.as_deref(),
+                        payment_method.as_deref(),
                         from.as_deref(),
                         to.as_deref()
                     ],

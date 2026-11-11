@@ -89,6 +89,7 @@ fn empty_filter() -> MovementFilter {
         category_id: None,
         kind: None,
         period: None,
+        payment_method: None,
         from: None,
         to: None,
     }
@@ -750,6 +751,32 @@ async fn list_applies_account_category_kind_period_and_date_filters() {
         .await
         .expect("period filter");
     assert_eq!(by_period.len(), 1);
+
+    let by_payment_method = fixture
+        .movements
+        .list(Some(MovementFilter {
+            payment_method: Some("pix".to_owned()),
+            ..empty_filter()
+        }))
+        .await
+        .expect("payment method filter");
+    assert_eq!(by_payment_method.len(), 2);
+    assert!(
+        by_payment_method
+            .iter()
+            .all(|movement| movement.payment_method.as_deref() == Some("pix"))
+    );
+
+    assert!(matches!(
+        fixture
+            .movements
+            .list(Some(MovementFilter {
+                payment_method: Some("boleto".to_owned()),
+                ..empty_filter()
+            }))
+            .await,
+        Err(AppError::Validation { .. })
+    ));
 
     let by_date = fixture
         .movements

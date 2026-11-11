@@ -143,11 +143,39 @@ Validações realizadas após os ajustes:
 - `npm run build` passou
 - `npm run tauri build -- --no-bundle` passou
 
+### Phase 3 — Reports & Data
+
+**STATUS: COMPLETA.**
+
+A Phase 3 foi publicada em `main` e aprovada em teste manual de backup e restauração.
+
+Entregue:
+
+- dashboard com saldos do mês, resultado e compromissos;
+- relatórios de gastos, receitas, fluxo de caixa, patrimônio líquido e compromissos;
+- filtros combináveis por data, período, categoria, conta e método de pagamento;
+- conta e método de pagamento aplicados a gastos, receitas e fluxo de caixa;
+- patrimônio líquido calculado como `ativos - passivos`, incluindo “Despesa a reconhecer”;
+- CSV com BOM, separador `;`, CRLF, escape e os mesmos filtros do livro, incluindo forma de pagamento;
+- backup local com retenção, snapshot pré-restauração e validação de schema/FK/versão;
+- restauração segura com nomes restritos e preservação de backups de migração;
+- testes de relatórios, backup/restauração e CSV.
+
+Validações realizadas:
+
+- `npm run check` sem erros/warnings
+- `npm test` passou
+- `cargo fmt --all -- --check` passou
+- `cargo clippy --workspace --all-targets -- -D warnings` passou
+- `cargo test --workspace` passou
+- `npm run build` passou
+- `npm run tauri build -- --no-bundle` passou
+
 ### Próximo trabalho
 
-**Phase 3 — Reports & Data**
+**Phase 4 — Finish & Distribution**
 
-Não iniciar Phase 4 antes de concluir e validar relatórios, backup, restauração, CSV e integridade.
+Não iniciar Phase 4 sem autorização explícita.
 
 ---
 
@@ -1041,6 +1069,8 @@ DoD:
 
 ## Phase 3 — Reports & Data
 
+**STATUS: COMPLETA**
+
 Objetivo:
 
 - dashboard;
@@ -1214,13 +1244,9 @@ Não copie a sessão inteira para contexto sem necessidade.
 
 # 15. Próximo passo exato
 
-**Implementar somente a Phase 3 — Reports & Data.**
+**Phase 3 — Reports & Data concluída e publicada.**
 
-Começar pelo backend/domínio, consultas e testes; depois conectar as telas.
+Próximo trabalho: Phase 4 — Finish & Distribution.
 
-Não iniciar Phase 4, refinamento visual amplo ou funcionalidades V2 antes de concluir e validar relatórios, dados e integridade.
-
-A primeira meta é:
-
-> Tally entrega dashboard, relatórios de gastos, receitas, fluxo de caixa, patrimônio líquido e compromissos, além de backup local, restauração, exportação CSV e verificação de integridade, sempre lendo apenas dados persistidos e sem recalcular regras financeiras no frontend.
+Não iniciar a Phase 4 sem autorização explícita. Não implementar refinamento visual amplo ou funcionalidades V2 antecipadamente.
 

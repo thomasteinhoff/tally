@@ -153,7 +153,7 @@
 
 <section class="summary-strip" aria-label="Resumo das contas ativas">
   <div>
-    <span class="data-label">Patrimônio líquido das contas</span>
+    <span class="data-label">Saldo das contas</span>
     <strong class="summary-value">{formatCents(totalCents)}</strong>
   </div>
   <div>
@@ -161,7 +161,10 @@
     <strong class="summary-value">{activeAccounts.length}</strong>
   </div>
   <div class="summary-note">
-    <span class="mono">ativos menos dívidas de cartão</span>
+    <span class="mono">caixa e cartões</span>
+    <span>
+      O patrimônio líquido do dashboard soma também “Despesa a reconhecer”.
+    </span>
   </div>
 </section>
 

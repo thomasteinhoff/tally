@@ -2,7 +2,7 @@
 
 Aplicativo desktop local-first para registrar, acompanhar e medir a vida financeira pessoal.
 
-**Fase atual:** Fase 2 — Cards & Installments concluída. Além do core contábil, o app permite cadastrar cartões de crédito como passivo, lançar compras parceladas com reconhecimento por parcela, acompanhar dívida, limite e compromissos futuros, e registrar pagamentos FIFO com alocação por parcela — tudo derivado dos lançamentos no SQLite.
+**Fase atual:** Fase 3 — Reports & Data concluída. O app agora entrega dashboard com dados reais, relatórios de gastos, receitas, fluxo de caixa, patrimônio e compromissos, além de backup/restauração local, exportação CSV e verificação de integridade — tudo calculado no Rust a partir dos lançamentos no SQLite.
 
 ## Stack
 
@@ -113,3 +113,16 @@ src/              UI Svelte, rotas e formulários
 - Pagamento acima da dívida permanece não alocado, aparece como crédito no cartão e nunca vira despesa.
 - Exclusão de parcelamento com pagamentos bloqueada com explicação explícita na interface.
 - Testes financeiros de integração cobrindo os cenários críticos da fase, incluindo pagamento acima da dívida.
+
+## Fase 3 — entregue
+
+- Dashboard com patrimônio líquido, resultado do mês, dívida de cartão, compromissos futuros, maiores despesas e últimos lançamentos.
+- Relatório de gastos e receitas por categoria, com filtros combináveis por conta, forma de pagamento, período, período do dia e categoria.
+- Fluxo de caixa consolidado por mês e por origem, excluindo transferências, saldos iniciais e reconhecimentos de parcela, com filtros por conta, forma de pagamento, categoria, período e datas.
+- Patrimônio líquido em uma data, com ativos, passivos e exposição separada da conta interna "Despesa a reconhecer".
+- Compromissos futuros por mês e parcelas vencidas, com horizonte padrão de 12 meses.
+- Backup local via `VACUUM INTO`, retenção configurável, listagem e restauração com snapshot de segurança, validação de schema e referências, migração pendente e rechecagem de integridade.
+- Exportação CSV UTF-8 com BOM, separador `;`, CRLF e valores em BRL, respeitando os mesmos filtros da lista de movimentações.
+- Verificação de integridade combinando `PRAGMA integrity_check` e `PRAGMA foreign_key_check`.
+- Backup automático antes de aplicar migrations pendentes ao abrir o banco; backups de migração e de restauração não entram na retenção normal.
+- Testes de integração para fórmulas, filtros, parcelas, fluxo de caixa, patrimônio, compromissos, backup/restore, CSV e migração de backup legado.

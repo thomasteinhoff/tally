@@ -450,6 +450,7 @@ fn normalize_filter(filter: Option<MovementFilter>) -> Result<MovementFilter, Ap
         category_id: None,
         kind: None,
         period: None,
+        payment_method: None,
         from: None,
         to: None,
     });
@@ -482,11 +483,24 @@ fn normalize_filter(filter: Option<MovementFilter>) -> Result<MovementFilter, Ap
     let to = validate_filter_date(filter.to.as_deref())?;
     validate_date_range(from.as_deref(), to.as_deref())?;
 
+    let payment_method = filter
+        .payment_method
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(|value| {
+            PaymentMethod::parse(value)
+                .map(|method| method.as_str().to_owned())
+                .ok_or_else(|| AppError::validation("método de pagamento inválido"))
+        })
+        .transpose()?;
+
     Ok(MovementFilter {
         account_id: normalize_optional_id(filter.account_id),
         category_id: normalize_optional_id(filter.category_id),
         kind,
         period,
+        payment_method,
         from,
         to,
     })

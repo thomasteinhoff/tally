@@ -109,6 +109,7 @@ pub struct MovementFilter {
     pub category_id: Option<String>,
     pub kind: Option<String>,
     pub period: Option<String>,
+    pub payment_method: Option<String>,
     pub from: Option<String>,
     pub to: Option<String>,
 }
@@ -340,4 +341,238 @@ pub struct CreateCardPaymentInput {
     pub occurred_time: Option<String>,
     pub manual_period: Option<String>,
     pub description: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[ts(export, export_to = "../../../src/lib/api/bindings/")]
+pub struct UpdateSettingsInput {
+    pub backup_retention: u32,
+}
+
+// ---------------------------------------------------------------------------
+// Relatórios
+// ---------------------------------------------------------------------------
+
+/// Filtro comum dos relatórios. `from`/`to` são datas ISO; `period` é o
+/// período do dia armazenado no lançamento; `account_id` e `payment_method`
+/// só afetam gastos, receitas e fluxo de caixa.
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[ts(export, export_to = "../../../src/lib/api/bindings/")]
+pub struct ReportFilter {
+    pub from: Option<String>,
+    pub to: Option<String>,
+    pub period: Option<String>,
+    pub category_id: Option<String>,
+    pub account_id: Option<String>,
+    pub payment_method: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[ts(export, export_to = "../../../src/lib/api/bindings/")]
+pub struct CategoryTotalDto {
+    pub category_id: Option<String>,
+    pub category_name: String,
+    #[ts(type = "number")]
+    pub total_cents: i64,
+    #[ts(type = "number")]
+    pub entry_count: i64,
+}
+
+/// Relatório por categoria usado tanto para gastos quanto para receitas.
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[ts(export, export_to = "../../../src/lib/api/bindings/")]
+pub struct CategoryReportDto {
+    pub kind: String,
+    pub from: String,
+    pub to: String,
+    pub period: Option<String>,
+    #[ts(type = "number")]
+    pub total_cents: i64,
+    #[ts(type = "number")]
+    pub entry_count: i64,
+    pub categories: Vec<CategoryTotalDto>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[ts(export, export_to = "../../../src/lib/api/bindings/")]
+pub struct CashFlowGroupDto {
+    pub label: String,
+    pub kind: String,
+    #[ts(type = "number")]
+    pub inflow_cents: i64,
+    #[ts(type = "number")]
+    pub outflow_cents: i64,
+    #[ts(type = "number")]
+    pub net_cents: i64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[ts(export, export_to = "../../../src/lib/api/bindings/")]
+pub struct CashFlowMonthDto {
+    pub month: String,
+    #[ts(type = "number")]
+    pub inflow_cents: i64,
+    #[ts(type = "number")]
+    pub outflow_cents: i64,
+    #[ts(type = "number")]
+    pub net_cents: i64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[ts(export, export_to = "../../../src/lib/api/bindings/")]
+pub struct CashFlowReportDto {
+    pub from: String,
+    pub to: String,
+    pub period: Option<String>,
+    #[ts(type = "number")]
+    pub inflow_cents: i64,
+    #[ts(type = "number")]
+    pub outflow_cents: i64,
+    #[ts(type = "number")]
+    pub net_cents: i64,
+    pub groups: Vec<CashFlowGroupDto>,
+    pub months: Vec<CashFlowMonthDto>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[ts(export, export_to = "../../../src/lib/api/bindings/")]
+pub struct NetWorthAccountDto {
+    pub account_id: String,
+    pub name: String,
+    pub account_type: Option<String>,
+    #[ts(type = "number")]
+    pub balance_cents: i64,
+}
+
+/// Patrimônio em uma data. `assets_cents` inclui a conta interna
+/// "Despesa a reconhecer", exposta separadamente em `deferred_expense_cents`.
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[ts(export, export_to = "../../../src/lib/api/bindings/")]
+pub struct NetWorthReportDto {
+    pub as_of: String,
+    #[ts(type = "number")]
+    pub assets_cents: i64,
+    #[ts(type = "number")]
+    pub liabilities_cents: i64,
+    #[ts(type = "number")]
+    pub net_worth_cents: i64,
+    #[ts(type = "number")]
+    pub deferred_expense_cents: i64,
+    pub accounts: Vec<NetWorthAccountDto>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[ts(export, export_to = "../../../src/lib/api/bindings/")]
+pub struct CommitmentDto {
+    pub installment_id: String,
+    pub plan_id: String,
+    pub card_account_id: String,
+    pub card_account_name: String,
+    pub category_name: String,
+    pub description: Option<String>,
+    #[ts(type = "number")]
+    pub seq: i64,
+    #[ts(type = "number")]
+    pub installment_count: i64,
+    pub due_on: String,
+    #[ts(type = "number")]
+    pub amount_cents: i64,
+    #[ts(type = "number")]
+    pub paid_cents: i64,
+    #[ts(type = "number")]
+    pub outstanding_cents: i64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[ts(export, export_to = "../../../src/lib/api/bindings/")]
+pub struct CommitmentMonthDto {
+    pub month: String,
+    #[ts(type = "number")]
+    pub total_cents: i64,
+    pub items: Vec<CommitmentDto>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[ts(export, export_to = "../../../src/lib/api/bindings/")]
+pub struct CommitmentsReportDto {
+    pub as_of: String,
+    /// Parcelas com vencimento estritamente depois desta data são futuras.
+    pub start_after: String,
+    pub horizon_end: String,
+    #[ts(type = "number")]
+    pub total_cents: i64,
+    #[ts(type = "number")]
+    pub overdue_cents: i64,
+    pub months: Vec<CommitmentMonthDto>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[ts(export, export_to = "../../../src/lib/api/bindings/")]
+pub struct DashboardDto {
+    pub as_of: String,
+    pub month_from: String,
+    pub month_to: String,
+    #[ts(type = "number")]
+    pub net_worth_cents: i64,
+    #[ts(type = "number")]
+    pub assets_cents: i64,
+    #[ts(type = "number")]
+    pub liabilities_cents: i64,
+    #[ts(type = "number")]
+    pub month_income_cents: i64,
+    #[ts(type = "number")]
+    pub month_expense_cents: i64,
+    #[ts(type = "number")]
+    pub month_result_cents: i64,
+    #[ts(type = "number")]
+    pub card_debt_cents: i64,
+    #[ts(type = "number")]
+    pub card_credit_cents: i64,
+    #[ts(type = "number")]
+    pub overdue_installments_cents: i64,
+    #[ts(type = "number")]
+    pub future_commitments_cents: i64,
+    pub top_expenses: Vec<CategoryTotalDto>,
+}
+
+// ---------------------------------------------------------------------------
+// Dados: backup, restauração e CSV
+// ---------------------------------------------------------------------------
+
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[ts(export, export_to = "../../../src/lib/api/bindings/")]
+pub struct BackupDto {
+    pub file_name: String,
+    pub path: String,
+    #[ts(type = "number")]
+    pub size_bytes: i64,
+    pub created_at: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[ts(export, export_to = "../../../src/lib/api/bindings/")]
+pub struct RestoreResultDto {
+    pub backup: BackupDto,
+    pub integrity: IntegrityReportDto,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[ts(export, export_to = "../../../src/lib/api/bindings/")]
+pub struct ExportCsvInput {
+    pub account_id: Option<String>,
+    pub category_id: Option<String>,
+    pub kind: Option<String>,
+    pub period: Option<String>,
+    pub payment_method: Option<String>,
+    pub from: Option<String>,
+    pub to: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[ts(export, export_to = "../../../src/lib/api/bindings/")]
+pub struct CsvExportDto {
+    pub file_name: String,
+    pub path: String,
+    #[ts(type = "number")]
+    pub row_count: i64,
 }
