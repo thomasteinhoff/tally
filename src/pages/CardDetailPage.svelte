@@ -6,8 +6,6 @@
   } from "@tanstack/svelte-query";
 
   import {
-    createCardPayment,
-    createCardPurchase,
     deleteCardPayment,
     deleteInstallmentPlan,
     getCard,
@@ -16,16 +14,18 @@
     listCategories,
     listInstallmentPlans,
   } from "../lib/api";
-  import CardPaymentModal from "../lib/components/CardPaymentModal.svelte";
-  import CardPurchaseModal from "../lib/components/CardPurchaseModal.svelte";
+  import MovementFormModal from "../lib/components/MovementFormModal.svelte";
   import { confirmAction } from "../lib/confirm";
   import { normalizeError } from "../lib/errors";
   import {
     formatCents,
     formatDate,
+    formatLimit,
     installmentStatusLabel,
     periodLabel,
   } from "../lib/format";
+  import type { MovementFormRequest } from "../lib/movement-form";
+  import { submitMovementForm } from "../lib/movement-submit";
   import { notify } from "../lib/toast.svelte";
 
   let { cardId }: { cardId: string } = $props();
@@ -60,20 +60,15 @@
   }));
 
   const purchaseMutation = createMutation(() => ({
-    mutationFn: createCardPurchase,
-    onSuccess: () => {
+    mutationFn: (request: MovementFormRequest) => submitMovementForm(request),
+    onSuccess: (_result, request) => {
       void queryClient.invalidateQueries();
       composer = null;
-      notify("Compra lançada.");
-    },
-  }));
-
-  const paymentMutation = createMutation(() => ({
-    mutationFn: createCardPayment,
-    onSuccess: () => {
-      void queryClient.invalidateQueries();
-      composer = null;
-      notify("Pagamento registrado.");
+      notify(
+        request.form === "card_payment"
+          ? "Pagamento registrado."
+          : "Compra lançada.",
+      );
     },
   }));
 
@@ -124,12 +119,11 @@
   );
 
   function closeComposer(): void {
-    if (purchaseMutation.isPending || paymentMutation.isPending) {
+    if (purchaseMutation.isPending) {
       return;
     }
     composer = null;
     purchaseMutation.reset();
-    paymentMutation.reset();
   }
 
   async function confirmDeletePlan(
@@ -173,7 +167,7 @@
       type="button"
       class="button"
       onclick={() => {
-        paymentMutation.reset();
+        purchaseMutation.reset();
         composer = "payment";
       }}
       disabled={!card || card.debt_cents <= 0 || Boolean(card.archived_at)}
@@ -230,33 +224,21 @@
       <strong class="hero-value">{formatCents(card.debt_cents)}</strong>
     </div>
     <div>
-      <span class="data-label">Limite</span>
-      <strong class="summary-value">
-        {card.credit_limit_cents === null
-          ? "—"
-          : formatCents(card.credit_limit_cents)}
-      </strong>
-    </div>
-    <div>
-      <span class="data-label">Disponível</span>
+      <span class="data-label">Disponível / limite</span>
       <strong
         class="summary-value"
         class:amount-negative={card.available_limit_cents !== null &&
           card.available_limit_cents < 0}
       >
-        {card.available_limit_cents === null
-          ? "—"
-          : formatCents(card.available_limit_cents)}
+        {formatLimit(card.available_limit_cents, card.credit_limit_cents)}
       </strong>
     </div>
-    {#if card.credit_cents > 0}
-      <div>
-        <span class="data-label">Crédito</span>
-        <strong class="summary-value amount-positive">
-          {formatCents(card.credit_cents)}
-        </strong>
-      </div>
-    {/if}
+    <div>
+      <span class="data-label">Crédito</span>
+      <strong class="summary-value amount-positive">
+        {formatCents(card.credit_cents)}
+      </strong>
+    </div>
     <div class="summary-note">
       <span class="mono">
         vencido {formatCents(card.overdue_cents)} · mês{" "}
@@ -474,28 +456,19 @@
   </section>
 {/if}
 
-{#if composer === "purchase"}
-  <CardPurchaseModal
-    cards={cards}
+{#if composer === "purchase" || composer === "payment"}
+  <MovementFormModal
+    {accounts}
     {categories}
+    cards={cards}
     defaultCardId={cardId}
+    defaultKind={composer === "purchase" ? "card_purchase" : "card_payment"}
+    allowedKinds={["card_purchase", "card_payment"]}
     saving={purchaseMutation.isPending}
     error={purchaseMutation.error
       ? normalizeError(purchaseMutation.error).message
       : null}
-    onsave={(input) => purchaseMutation.mutate(input)}
-    onclose={closeComposer}
-  />
-{:else if composer === "payment"}
-  <CardPaymentModal
-    cards={cards}
-    {accounts}
-    defaultCardId={cardId}
-    saving={paymentMutation.isPending}
-    error={paymentMutation.error
-      ? normalizeError(paymentMutation.error).message
-      : null}
-    onsave={(input) => paymentMutation.mutate(input)}
+    onsave={(request) => purchaseMutation.mutate(request)}
     onclose={closeComposer}
   />
 {/if}

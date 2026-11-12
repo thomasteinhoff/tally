@@ -48,6 +48,9 @@
   const filteredLines = $derived(
     statement ? filterStatementLines(statement.lines, lineFilters) : [],
   );
+  // O extrato é publicado em ordem cronológica para calcular o saldo corrente;
+  // na tela mostramos do lançamento mais recente para o mais antigo.
+  const displayedLines = $derived([...filteredLines].reverse());
   const lineFiltersActive = $derived(
     hasStatementLineFilters(lineFilters),
   );
@@ -77,8 +80,9 @@
     <span class="eyebrow">Extrato</span>
     <h2>{statement?.account.name ?? "Conta"}</h2>
     <p>
-      Lançamentos publicados em ordem cronológica, com saldo corrente calculado
-      pelo Rust. O saldo inicial aparece como linha própria.
+      Lançamentos publicados com o saldo corrente calculado pelo Rust. A lista
+      aparece da data mais recente para a mais antiga; o saldo inicial segue
+      como linha própria.
     </p>
   </div>
   <button
@@ -322,7 +326,7 @@
             </tr>
           </thead>
           <tbody>
-            {#each filteredLines as line (line.entry_id)}
+            {#each displayedLines as line (line.entry_id)}
               <tr>
                 <td>{formatDate(line.occurred_on)}</td>
                 <td>
@@ -338,8 +342,11 @@
                 <td>{periodLabel(line.period)}</td>
                 <td
                   class="mono align-right"
-                  class:amount-negative={line.amount_cents < 0}
-                  class:amount-positive={line.amount_cents > 0}
+                  class:amount-negative={line.amount_cents < 0 &&
+                    line.kind !== "transfer"}
+                  class:amount-positive={line.amount_cents > 0 &&
+                    line.kind !== "transfer"}
+                  class:amount-neutral={line.kind === "transfer"}
                 >
                   {formatCents(line.amount_cents)}
                 </td>

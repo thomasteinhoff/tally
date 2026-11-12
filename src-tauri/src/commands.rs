@@ -6,7 +6,7 @@ use tally_app::{
     CreateExpenseInput, CreateIncomeInput, CreateTransferInput, CsvExportDto, DashboardDto,
     ExportCsvInput, InstallmentPlanDto, IntegrityReportDto, MovementDto, MovementFilter,
     MovementsService, NetWorthReportDto, ReportFilter, ReportsService, RestoreResultDto,
-    SettingsDto, UpdateMovementInput, UpdateSettingsInput,
+    SettingsDto, UpdateInstallmentPlanInput, UpdateMovementInput, UpdateSettingsInput,
 };
 use tally_infra::{
     DataTools, Database, SqliteAccountsRepository, SqliteBootstrapRepository,
@@ -132,8 +132,11 @@ pub async fn update_account(
     state: State<'_, AppState>,
     id: String,
     name: String,
+    credit_limit_cents: Option<i64>,
 ) -> Result<AccountDto, AppError> {
-    accounts_service(state.inner())?.rename(&id, &name).await
+    accounts_service(state.inner())?
+        .update(&id, &name, credit_limit_cents)
+        .await
 }
 
 #[tauri::command]
@@ -317,6 +320,17 @@ pub async fn delete_installment_plan(
 }
 
 #[tauri::command]
+pub async fn update_installment_plan(
+    state: State<'_, AppState>,
+    plan_id: String,
+    input: UpdateInstallmentPlanInput,
+) -> Result<InstallmentPlanDto, AppError> {
+    cards_service(state.inner())?
+        .update_plan(&plan_id, input)
+        .await
+}
+
+#[tauri::command]
 pub async fn create_card_payment(
     state: State<'_, AppState>,
     input: CreateCardPaymentInput,
@@ -408,6 +422,30 @@ pub async fn restore_backup(
     file_name: String,
 ) -> Result<RestoreResultDto, AppError> {
     data_tools(state.inner())?.restore_backup(&file_name).await
+}
+
+#[tauri::command]
+pub async fn open_app_folder(
+    app: tauri::AppHandle,
+    state: State<'_, AppState>,
+    folder: String,
+) -> Result<(), AppError> {
+    use tauri_plugin_opener::OpenerExt;
+
+    let path = match folder.as_str() {
+        "data" => state.paths.root.clone(),
+        "logs" => state.paths.logs.clone(),
+        _ => return Err(AppError::validation("pasta solicitada não é reconhecida")),
+    };
+
+    app.opener()
+        .open_path(path.to_string_lossy().to_string(), None::<&str>)
+        .map_err(|error| {
+            AppError::io(
+                "não foi possível abrir a pasta no Explorer",
+                error.to_string(),
+            )
+        })
 }
 
 #[tauri::command]

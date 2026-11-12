@@ -332,6 +332,19 @@ pub struct CreateCardPurchaseInput {
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
 #[ts(export, export_to = "../../../src/lib/api/bindings/")]
+pub struct UpdateInstallmentPlanInput {
+    pub category_id: String,
+    #[ts(type = "number")]
+    pub total_cents: i64,
+    #[ts(type = "number")]
+    pub installment_count: i64,
+    pub first_due_on: String,
+    pub period: String,
+    pub description: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[ts(export, export_to = "../../../src/lib/api/bindings/")]
 pub struct CreateCardPaymentInput {
     pub card_account_id: String,
     pub bank_account_id: String,

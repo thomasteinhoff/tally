@@ -13,6 +13,7 @@
 
   let dialog = $state<HTMLElement>();
   let previousFocus: HTMLElement | null = null;
+  let backdropPressed = $state(false);
 
   $effect(() => {
     previousFocus =
@@ -37,10 +38,16 @@
 <div
   class="modal-backdrop"
   role="presentation"
+  onmousedown={(event) => {
+    backdropPressed = event.target === event.currentTarget;
+  }}
   onclick={(event) => {
-    if (event.target === event.currentTarget) {
+    // Só fecha quando o clique começou e terminou no fundo. Selecionar texto
+    // dentro do formulário e arrastar para fora não deve fechar o modal.
+    if (backdropPressed && event.target === event.currentTarget) {
       onclose();
     }
+    backdropPressed = false;
   }}
 >
   <div

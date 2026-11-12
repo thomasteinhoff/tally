@@ -1,13 +1,18 @@
 use async_trait::async_trait;
-use chrono::{Datelike, Months};
+use chrono::{Datelike, Months, NaiveDate};
 use rusqlite::{Connection, OptionalExtension, Transaction, params};
 use tally_app::cards::{
     CardsRepository, EXPENSE_ACCOUNT_ID, NewCardPayment, NewCardPurchase, NewInstallment,
+    PlanUpdate, RECOGNITION_ACCOUNT_ID,
 };
 use tally_app::dto::{
     CardPaymentDto, CardSummaryDto, InstallmentAllocationDto, InstallmentDto, InstallmentPlanDto,
 };
 use tally_app::error::AppError;
+use tally_domain::installment::build_schedule;
+use tally_domain::ledger::{Posting, validate_postings};
+use tally_domain::money::Money;
+use uuid::Uuid;
 
 use crate::db::{Database, map_sqlite_error};
 
@@ -124,7 +129,11 @@ impl CardsRepository for SqliteCardsRepository {
             .transaction(move |transaction| remove_plan(transaction, &plan_id))
             .await
     }
-
+    async fn update_plan(&self, update: PlanUpdate) -> Result<InstallmentPlanDto, AppError> {
+        self.db
+            .transaction(move |transaction| replace_plan(transaction, &update))
+            .await
+    }
     async fn create_payment(&self, payment: NewCardPayment) -> Result<CardPaymentDto, AppError> {
         self.db
             .transaction(move |transaction| {
@@ -339,6 +348,225 @@ fn recognition_entry_ids(connection: &Connection, plan_id: &str) -> Result<Vec<S
         .map_err(map_sqlite_error)?;
     rows.collect::<rusqlite::Result<Vec<_>>>()
         .map_err(map_sqlite_error)
+}
+
+/// Atualiza um parcelamento. Com pagamentos alocados, apenas a descrição muda;
+/// sem pagamentos, o plano é reconstruído (unpost → alterar → repost) para
+/// preservar o razão e recalcular as parcelas.
+fn replace_plan(
+    transaction: &Transaction<'_>,
+    update: &PlanUpdate,
+) -> Result<InstallmentPlanDto, AppError> {
+    let current = fetch_plan(transaction, &update.plan_id)
+        .map_err(map_sqlite_error)?
+        .ok_or_else(|| AppError::not_found("parcelamento não encontrado"))?;
+
+    let purchase_entry_id: String = transaction
+        .query_row(
+            "SELECT purchase_entry_id FROM installment_plans WHERE id = ?1",
+            [&update.plan_id],
+            |row| row.get(0),
+        )
+        .map_err(map_sqlite_error)?;
+
+    let payment_count: i64 = transaction
+        .query_row(
+            "SELECT COUNT(*)
+             FROM installment_allocations a
+             JOIN installments i ON i.id = a.installment_id
+             WHERE i.plan_id = ?1",
+            [&update.plan_id],
+            |row| row.get(0),
+        )
+        .map_err(map_sqlite_error)?;
+
+    if payment_count > 0 {
+        if current.total_cents != update.total_cents
+            || current.installment_count != update.installment_count
+            || current.first_due_on != update.first_due_on
+            || current.category_id != update.category_id
+            || current.period != update.period
+        {
+            return Err(AppError::conflict(
+                "o parcelamento possui pagamentos; apenas a descrição pode ser alterada",
+            ));
+        }
+
+        transaction
+            .execute(
+                "UPDATE installment_plans
+                 SET description = ?1,
+                     updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+                 WHERE id = ?2",
+                params![update.description, update.plan_id],
+            )
+            .map_err(map_sqlite_error)?;
+
+        let mut entry_ids = recognition_entry_ids(transaction, &update.plan_id)?;
+        entry_ids.push(purchase_entry_id);
+        for entry_id in &entry_ids {
+            unpost_entry(transaction, entry_id)?;
+        }
+        for entry_id in &entry_ids {
+            transaction
+                .execute(
+                    "UPDATE journal_entries
+                     SET description = ?1,
+                         updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+                     WHERE id = ?2",
+                    params![update.description, entry_id],
+                )
+                .map_err(map_sqlite_error)?;
+        }
+        for entry_id in &entry_ids {
+            post_entry(transaction, entry_id)?;
+        }
+
+        return fetch_plan(transaction, &update.plan_id)
+            .map_err(map_sqlite_error)?
+            .ok_or_else(|| AppError::not_found("parcelamento não encontrado"));
+    }
+
+    ensure_card(transaction, &current.card_account_id)?;
+    ensure_expense_category(transaction, &update.category_id)?;
+
+    let recognition_ids = recognition_entry_ids(transaction, &update.plan_id)?;
+    transaction
+        .execute(
+            "DELETE FROM installments WHERE plan_id = ?1",
+            [&update.plan_id],
+        )
+        .map_err(map_sqlite_error)?;
+    for entry_id in &recognition_ids {
+        unpost_entry(transaction, entry_id)?;
+        transaction
+            .execute("DELETE FROM journal_entries WHERE id = ?1", [entry_id])
+            .map_err(map_sqlite_error)?;
+    }
+
+    unpost_entry(transaction, &purchase_entry_id)?;
+    transaction
+        .execute(
+            "UPDATE journal_entries
+             SET description = ?1,
+                 updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+             WHERE id = ?2",
+            params![update.description, purchase_entry_id],
+        )
+        .map_err(map_sqlite_error)?;
+    transaction
+        .execute(
+            "DELETE FROM postings WHERE entry_id = ?1",
+            [&purchase_entry_id],
+        )
+        .map_err(map_sqlite_error)?;
+
+    let purchase_postings = [
+        Posting::new(
+            Uuid::now_v7().to_string(),
+            RECOGNITION_ACCOUNT_ID,
+            Money::from_cents(update.total_cents),
+        ),
+        Posting::new(
+            Uuid::now_v7().to_string(),
+            current.card_account_id.clone(),
+            Money::from_cents(-update.total_cents),
+        ),
+    ];
+    validate_postings(&purchase_postings).map_err(AppError::validation)?;
+    insert_postings(transaction, &purchase_entry_id, &purchase_postings)?;
+    post_entry(transaction, &purchase_entry_id)?;
+
+    let first_due = NaiveDate::parse_from_str(&update.first_due_on, "%Y-%m-%d")
+        .map_err(|_| AppError::validation("informe uma data de vencimento válida"))?;
+    let schedule = build_schedule(
+        update.total_cents,
+        update.installment_count as u32,
+        first_due,
+    )
+    .map_err(AppError::validation)?;
+
+    for (index, (amount, due_on)) in schedule
+        .amounts
+        .iter()
+        .zip(schedule.due_dates.iter())
+        .enumerate()
+    {
+        let amount_cents = amount.cents();
+        let entry_id = Uuid::now_v7().to_string();
+        let postings = [
+            Posting::new(
+                Uuid::now_v7().to_string(),
+                EXPENSE_ACCOUNT_ID,
+                Money::from_cents(amount_cents),
+            ),
+            Posting::new(
+                Uuid::now_v7().to_string(),
+                RECOGNITION_ACCOUNT_ID,
+                Money::from_cents(-amount_cents),
+            ),
+        ];
+        validate_postings(&postings).map_err(AppError::validation)?;
+
+        insert_entry(
+            transaction,
+            &entry_id,
+            "expense",
+            &due_on.format("%Y-%m-%d").to_string(),
+            None,
+            Some(&update.period),
+            update.description.as_deref(),
+            EXPENSE_ACCOUNT_ID,
+            None,
+            Some(&update.category_id),
+            Some(&current.payment_method),
+        )?;
+        insert_postings(transaction, &entry_id, &postings)?;
+        post_entry(transaction, &entry_id)?;
+
+        transaction
+            .execute(
+                "INSERT INTO installments (
+                    id, plan_id, seq, due_on, amount_cents, recognition_entry_id
+                 ) VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+                params![
+                    Uuid::now_v7().to_string(),
+                    update.plan_id,
+                    index as i64 + 1,
+                    due_on.format("%Y-%m-%d").to_string(),
+                    amount_cents,
+                    entry_id,
+                ],
+            )
+            .map_err(map_sqlite_error)?;
+    }
+
+    transaction
+        .execute(
+            "UPDATE installment_plans
+             SET category_id = ?1,
+                 description = ?2,
+                 total_cents = ?3,
+                 installment_count = ?4,
+                 first_due_on = ?5,
+                 period = ?6,
+                 updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+             WHERE id = ?7",
+            params![
+                update.category_id,
+                update.description,
+                update.total_cents,
+                update.installment_count,
+                update.first_due_on,
+                update.period,
+                update.plan_id,
+            ],
+        )
+        .map_err(map_sqlite_error)?;
+
+    fetch_plan(transaction, &update.plan_id)
+        .map_err(map_sqlite_error)?
+        .ok_or_else(|| AppError::not_found("parcelamento não encontrado"))
 }
 
 fn unpost_entry(connection: &Connection, entry_id: &str) -> Result<(), AppError> {

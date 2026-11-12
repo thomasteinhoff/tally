@@ -1,6 +1,7 @@
 use tally_app::{
     AccountsService, AppError, CardsService, CategoriesService, CreateAccountInput,
     CreateCardPaymentInput, CreateCardPurchaseInput, CreateCategoryInput, MovementsService,
+    UpdateInstallmentPlanInput,
 };
 use tally_infra::{
     Database, SqliteAccountsRepository, SqliteCardsRepository, SqliteCategoriesRepository,
@@ -722,6 +723,137 @@ async fn payment_rejects_a_liability_as_the_source_account() {
             .await,
         Err(AppError::Validation { .. })
     ));
+}
+
+#[tokio::test]
+async fn updating_an_unpaid_plan_rebuilds_installments_and_debt() {
+    let fixture = fixture().await;
+    let card_id = card(&fixture, "Cartao", 0, None).await;
+    let category_id = category(&fixture, "Compras").await;
+    let other_category = category(&fixture, "Casa").await;
+
+    let plan = fixture
+        .cards
+        .create_purchase(purchase_input(
+            &card_id,
+            &category_id,
+            90_000,
+            3,
+            "2035-01-10",
+        ))
+        .await
+        .expect("purchase should work");
+
+    let updated = fixture
+        .cards
+        .update_plan(
+            &plan.id,
+            UpdateInstallmentPlanInput {
+                category_id: other_category.clone(),
+                total_cents: 120_000,
+                installment_count: 4,
+                first_due_on: "2035-02-15".to_owned(),
+                period: "noite".to_owned(),
+                description: Some("Compra revisada".to_owned()),
+            },
+        )
+        .await
+        .expect("plan should be updated");
+
+    assert_eq!(updated.total_cents, 120_000);
+    assert_eq!(updated.category_id, other_category);
+    assert_eq!(updated.installments.len(), 4);
+    assert_eq!(
+        updated
+            .installments
+            .iter()
+            .map(|item| item.amount_cents)
+            .sum::<i64>(),
+        120_000
+    );
+    assert_eq!(updated.installments[0].due_on, "2035-02-15");
+    assert_eq!(updated.description.as_deref(), Some("Compra revisada"));
+    assert_eq!(recognized_expense(&fixture).await, 120_000);
+    assert_eq!(
+        fixture
+            .cards
+            .card_summary(&card_id)
+            .await
+            .expect("summary")
+            .debt_cents,
+        120_000
+    );
+    assert_eq!(net_worth(&fixture).await, -120_000);
+    assert_eq!(
+        scalar(
+            &fixture,
+            "SELECT COUNT(*) FROM journal_entries WHERE kind = 'expense' AND posted_at IS NOT NULL",
+        )
+        .await,
+        4
+    );
+}
+
+#[tokio::test]
+async fn updating_a_paid_plan_allows_only_the_description() {
+    let fixture = fixture().await;
+    let bank_id = account(&fixture, "Banco", 200_000).await;
+    let card_id = card(&fixture, "Cartao", 0, None).await;
+    let category_id = category(&fixture, "Compras").await;
+
+    let plan = fixture
+        .cards
+        .create_purchase(purchase_input(
+            &card_id,
+            &category_id,
+            90_000,
+            3,
+            "2035-01-10",
+        ))
+        .await
+        .expect("purchase should work");
+    fixture
+        .cards
+        .create_payment(payment_input(&card_id, &bank_id, 30_000, "2026-02-01"))
+        .await
+        .expect("payment should work");
+
+    let updated = fixture
+        .cards
+        .update_plan(
+            &plan.id,
+            UpdateInstallmentPlanInput {
+                category_id,
+                total_cents: 90_000,
+                installment_count: 3,
+                first_due_on: "2035-01-10".to_owned(),
+                period: plan.period.clone(),
+                description: Some("Nome novo".to_owned()),
+            },
+        )
+        .await
+        .expect("description should be updated");
+    assert_eq!(updated.description.as_deref(), Some("Nome novo"));
+    assert_eq!(updated.installments[0].paid_cents, 30_000);
+
+    assert!(matches!(
+        fixture
+            .cards
+            .update_plan(
+                &plan.id,
+                UpdateInstallmentPlanInput {
+                    category_id: updated.category_id.clone(),
+                    total_cents: 120_000,
+                    installment_count: 3,
+                    first_due_on: "2035-01-10".to_owned(),
+                    period: plan.period.clone(),
+                    description: None,
+                },
+            )
+            .await,
+        Err(AppError::Conflict { .. })
+    ));
+    assert_eq!(recognized_expense(&fixture).await, 90_000);
 }
 
 #[tokio::test]

@@ -26,8 +26,8 @@ pub use dto::{
     CreateExpenseInput, CreateIncomeInput, CreateTransferInput, CsvExportDto, DashboardDto,
     ExportCsvInput, InstallmentAllocationDto, InstallmentDto, InstallmentPlanDto,
     IntegrityReportDto, MovementDto, MovementFilter, NetWorthAccountDto, NetWorthReportDto,
-    ReportFilter, RestoreResultDto, SettingsDto, StatementLineDto, UpdateMovementInput,
-    UpdateSettingsInput,
+    ReportFilter, RestoreResultDto, SettingsDto, StatementLineDto, UpdateInstallmentPlanInput,
+    UpdateMovementInput, UpdateSettingsInput,
 };
 pub use error::{AppError, AppErrorDto};
 pub use movements::{MovementsRepository, MovementsService, NewMovement};

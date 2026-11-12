@@ -19,7 +19,6 @@
   import {
     accountTypeLabel,
     formatCents,
-    formatDate,
   } from "../lib/format";
   import type { AccountFormRequest } from "../lib/form-types";
   import { notify } from "../lib/toast.svelte";
@@ -100,7 +99,11 @@
       if (!request.id) {
         throw new Error("Conta sem identificador.");
       }
-      return updateAccount(request.id, request.name);
+      return updateAccount(
+        request.id,
+        request.name,
+        request.creditLimitCents,
+      );
     }
 
     return createAccount({
@@ -150,6 +153,15 @@
     Nova conta
   </button>
 </section>
+
+<nav class="view-switch" aria-label="Contas e cartões">
+  <a
+    class="view-switch-item is-active"
+    href="#/contas"
+    aria-current="page">Contas</a
+  >
+  <a class="view-switch-item" href="#/cartoes">Cartões</a>
+</nav>
 
 <section class="summary-strip" aria-label="Resumo das contas ativas">
   <div>
@@ -224,7 +236,6 @@
           <tr>
             <th scope="col">Conta</th>
             <th scope="col">Tipo</th>
-            <th scope="col">Criada em</th>
             <th scope="col">Situação</th>
             <th scope="col" class="align-right">Saldo</th>
             <th scope="col" class="align-right">Ações</th>
@@ -234,20 +245,16 @@
           {#each accounts as account (account.id)}
             <tr class:row-muted={Boolean(account.archived_at)}>
               <td>
-                <div class="cell-stack">
-                  <a
-                    class="text-link"
-                    href={account.account_type === "credit_card"
-                      ? `#/cartoes/${account.id}`
-                      : `#/contas/${account.id}`}
-                  >
-                    {account.name}
-                  </a>
-                  <small class="mono">{account.id.slice(0, 8)}</small>
-                </div>
+                <a
+                  class="text-link"
+                  href={account.account_type === "credit_card"
+                    ? `#/cartoes/${account.id}`
+                    : `#/contas/${account.id}`}
+                >
+                  {account.name}
+                </a>
               </td>
               <td>{accountTypeLabel(account.account_type)}</td>
-              <td>{formatDate(account.created_at.slice(0, 10))}</td>
               <td>
                 {#if account.archived_at}
                   <span class="tag tag--archived">Arquivada</span>

@@ -4,6 +4,7 @@ import {
   formatAmountInput,
   formatCents,
   formatDate,
+  formatLimit,
   formatMonth,
   movementAmountForInput,
   normalizeTimeInput,
@@ -80,6 +81,15 @@ describe("formatação de apoio", () => {
     expect(formatMonth("2026-10-31")).toBe("2026-10-31");
     expect(periodLabel("madrugada")).toBe("Madrugada");
     expect(periodLabel(null)).toBe("—");
+  });
+
+  it("combina disponível e limite do cartão", () => {
+    expect(formatLimit(140_000, 200_000)).toBe(
+      "R$ 1.400,00 / R$ 2.000,00",
+    );
+    expect(formatLimit(-1_000, 200_000)).toBe("-R$ 10,00 / R$ 2.000,00");
+    expect(formatLimit(null, 200_000)).toBe("— / R$ 2.000,00");
+    expect(formatLimit(140_000, null)).toBe("—");
   });
 
   it("usa magnitude no formulário exceto para ajustes assinados", () => {

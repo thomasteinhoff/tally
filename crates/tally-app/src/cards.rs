@@ -9,7 +9,7 @@ use uuid::Uuid;
 
 use crate::dto::{
     CardPaymentDto, CardSummaryDto, CreateCardPaymentInput, CreateCardPurchaseInput,
-    InstallmentPlanDto,
+    InstallmentPlanDto, UpdateInstallmentPlanInput,
 };
 use crate::error::AppError;
 use crate::validation::{
@@ -67,6 +67,17 @@ pub struct NewCardPayment {
     pub postings: [Posting; 2],
 }
 
+#[derive(Debug, Clone)]
+pub struct PlanUpdate {
+    pub plan_id: String,
+    pub category_id: String,
+    pub description: Option<String>,
+    pub total_cents: i64,
+    pub installment_count: i64,
+    pub first_due_on: String,
+    pub period: String,
+}
+
 #[async_trait]
 pub trait CardsRepository: Send + Sync {
     async fn list_cards(&self) -> Result<Vec<CardSummaryDto>, AppError>;
@@ -80,6 +91,7 @@ pub trait CardsRepository: Send + Sync {
         card_account_id: Option<&str>,
     ) -> Result<Vec<InstallmentPlanDto>, AppError>;
     async fn get_plan(&self, plan_id: &str) -> Result<InstallmentPlanDto, AppError>;
+    async fn update_plan(&self, update: PlanUpdate) -> Result<InstallmentPlanDto, AppError>;
     async fn delete_plan(&self, plan_id: &str) -> Result<(), AppError>;
     async fn create_payment(&self, payment: NewCardPayment) -> Result<CardPaymentDto, AppError>;
     async fn list_payments(
@@ -144,6 +156,35 @@ impl<R: CardsRepository> CardsService<R> {
     pub async fn delete_plan(&self, plan_id: &str) -> Result<(), AppError> {
         let plan_id = required_id(plan_id, "parcelamento")?;
         self.repo.delete_plan(&plan_id).await
+    }
+
+    pub async fn update_plan(
+        &self,
+        plan_id: &str,
+        input: UpdateInstallmentPlanInput,
+    ) -> Result<InstallmentPlanDto, AppError> {
+        let plan_id = required_id(plan_id, "parcelamento")?;
+        let category_id = required_id(&input.category_id, "categoria")?;
+        let total_cents = validate_positive_cents(input.total_cents)?;
+        let installment_count = validate_installment_count(input.installment_count, total_cents)?;
+        let first_due_on = validate_date(&input.first_due_on)?;
+        let description = normalize_description(input.description.as_deref())?;
+        let period = Period::parse(input.period.trim())
+            .ok_or_else(|| AppError::validation("informe um período válido"))?
+            .as_str()
+            .to_owned();
+
+        self.repo
+            .update_plan(PlanUpdate {
+                plan_id,
+                category_id,
+                description,
+                total_cents,
+                installment_count,
+                first_due_on,
+                period,
+            })
+            .await
     }
 
     pub async fn create_payment(
@@ -374,7 +415,7 @@ fn normalize_optional_id(value: Option<String>) -> Option<String> {
 
 #[cfg(test)]
 mod tests {
-    use super::{CardsRepository, CardsService, NewCardPayment, NewCardPurchase};
+    use super::{CardsRepository, CardsService, NewCardPayment, NewCardPurchase, PlanUpdate};
     use crate::dto::{CardPaymentDto, CardSummaryDto, CreateCardPurchaseInput, InstallmentPlanDto};
     use crate::error::AppError;
     use async_trait::async_trait;
@@ -417,6 +458,10 @@ mod tests {
 
         async fn delete_plan(&self, _plan_id: &str) -> Result<(), AppError> {
             Ok(())
+        }
+
+        async fn update_plan(&self, _update: PlanUpdate) -> Result<InstallmentPlanDto, AppError> {
+            Err(AppError::not_found("não usado"))
         }
 
         async fn create_payment(

@@ -173,7 +173,7 @@ async fn rename_preserves_id_and_history() {
         .expect("create should work");
 
     let renamed = service
-        .rename(&account.id, "  Banco novo  ")
+        .update(&account.id, "  Banco novo  ", None)
         .await
         .expect("rename should work");
 

@@ -36,7 +36,12 @@ pub struct NewAccount {
 pub trait AccountsRepository: Send + Sync {
     async fn list(&self, include_archived: bool) -> Result<Vec<AccountDto>, AppError>;
     async fn create(&self, account: NewAccount) -> Result<AccountDto, AppError>;
-    async fn rename(&self, id: &str, name: &str) -> Result<AccountDto, AppError>;
+    async fn update(
+        &self,
+        id: &str,
+        name: &str,
+        credit_limit_cents: Option<i64>,
+    ) -> Result<AccountDto, AppError>;
     async fn set_archived(&self, id: &str, archived: bool) -> Result<AccountDto, AppError>;
     async fn delete(&self, id: &str) -> Result<(), AppError>;
 }
@@ -116,9 +121,19 @@ impl<R: AccountsRepository> AccountsService<R> {
             .await
     }
 
-    pub async fn rename(&self, id: &str, name: &str) -> Result<AccountDto, AppError> {
+    pub async fn update(
+        &self,
+        id: &str,
+        name: &str,
+        credit_limit_cents: Option<i64>,
+    ) -> Result<AccountDto, AppError> {
         let name = normalize_name(name)?;
-        self.repo.rename(id, &name).await
+        if let Some(limit_cents) = credit_limit_cents
+            && (limit_cents < 0 || limit_cents.unsigned_abs() > MAX_SAFE_CENTS)
+        {
+            return Err(AppError::validation("informe um limite de crédito válido"));
+        }
+        self.repo.update(id, &name, credit_limit_cents).await
     }
 
     pub async fn set_archived(&self, id: &str, archived: bool) -> Result<AccountDto, AppError> {
@@ -213,7 +228,12 @@ mod tests {
             })
         }
 
-        async fn rename(&self, _id: &str, _name: &str) -> Result<AccountDto, AppError> {
+        async fn update(
+            &self,
+            _id: &str,
+            _name: &str,
+            _credit_limit_cents: Option<i64>,
+        ) -> Result<AccountDto, AppError> {
             Err(AppError::not_found("conta não encontrada"))
         }
 

@@ -80,6 +80,7 @@ pub fn run() {
             commands::list_installment_plans,
             commands::get_installment_plan,
             commands::delete_installment_plan,
+            commands::update_installment_plan,
             commands::create_card_payment,
             commands::list_card_payments,
             commands::delete_card_payment,
@@ -94,7 +95,8 @@ pub fn run() {
             commands::restore_backup,
             commands::export_csv,
             commands::get_settings,
-            commands::update_settings
+            commands::update_settings,
+            commands::open_app_folder
         ])
         .run(tauri::generate_context!())
         .expect("erro ao executar o Tally");

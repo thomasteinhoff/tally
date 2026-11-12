@@ -18,6 +18,7 @@
     updateSettings,
   } from "../lib/api";
   import { normalizeError } from "../lib/errors";
+  import { confirmAction } from "../lib/confirm";
   import { formatDate, kindLabel, paymentLabel } from "../lib/format";
 
   const queryClient = useQueryClient();
@@ -170,9 +171,11 @@
     settingsMutation.mutate({ backup_retention: retention });
   }
 
-  function restore(fileName: string): void {
-    const confirmed = window.confirm(
+  async function restore(fileName: string): Promise<void> {
+    const confirmed = await confirmAction(
       `Restaurar "${fileName}"? Os dados atuais serão substituídos.`,
+      "Restaurar backup",
+      "Restaurar",
     );
     if (!confirmed) return;
     restoreMutation.mutate(fileName);
@@ -424,7 +427,7 @@
                   <button
                     type="button"
                     class="button button--small button--quiet"
-                    onclick={() => restore(backup.file_name)}
+                    onclick={() => void restore(backup.file_name)}
                     disabled={restoreMutation.isPending}
                   >
                     Restaurar

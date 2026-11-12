@@ -136,7 +136,7 @@
 
       {#if !editing}
         <label class="field">
-          <span>{isCard ? "Dívida inicial" : "Saldo inicial"}</span>
+          <span>{isCard ? "Dívida inicial (passivo)" : "Saldo inicial"}</span>
           <input
             class="money-input"
             inputmode="decimal"
@@ -146,7 +146,7 @@
         </label>
       {/if}
 
-      {#if isCard && !editing}
+      {#if isCard}
         <label class="field">
           <span>Limite de crédito <small>opcional</small></span>
           <input
@@ -159,11 +159,16 @@
       {/if}
     </div>
 
-    {#if !editing && isCard}
+    {#if isCard}
       <p class="form-hint">
-        O cartão é um passivo. A dívida inicial entra contra o patrimônio; as
-        compras aumentam a dívida e o pagamento não vira despesa. O limite é
-        informativo e não bloqueia compras.
+        O cartão é um passivo: não tem saldo de ativo nem aceita saldo negativo.
+        {#if !editing}
+          A dívida inicial é opcional e entra contra o patrimônio; compras depois
+          aumentam a dívida e o pagamento não vira despesa.
+        {:else}
+          Para corrigir a dívida, use um ajuste no cartão.
+        {/if}
+        O limite é informativo e não bloqueia compras.
       </p>
     {:else if !editing}
       <p class="form-hint">
@@ -189,7 +194,7 @@
         Cancelar
       </button>
       <button type="submit" class="button button--primary" disabled={saving}>
-        {saving ? "Salvando…" : editing ? "Salvar nome" : "Criar conta"}
+        {saving ? "Salvando…" : editing ? "Salvar alterações" : "Criar conta"}
       </button>
     </footer>
   </form>

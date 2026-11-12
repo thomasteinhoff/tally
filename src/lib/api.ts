@@ -30,6 +30,7 @@ import type {
   ReportFilter,
   RestoreResultDto,
   SettingsDto,
+  UpdateInstallmentPlanInput,
   UpdateMovementInput,
   UpdateSettingsInput,
 } from "./api/bindings";
@@ -50,8 +51,16 @@ export function createAccount(input: CreateAccountInput): Promise<AccountDto> {
   return invoke<AccountDto>("create_account", { input });
 }
 
-export function updateAccount(id: string, name: string): Promise<AccountDto> {
-  return invoke<AccountDto>("update_account", { id, name });
+export function updateAccount(
+  id: string,
+  name: string,
+  creditLimitCents: number | null = null,
+): Promise<AccountDto> {
+  return invoke<AccountDto>("update_account", {
+    id,
+    name,
+    creditLimitCents,
+  });
 }
 
 export function setAccountArchived(
@@ -175,6 +184,16 @@ export function deleteInstallmentPlan(planId: string): Promise<void> {
   return invoke<void>("delete_installment_plan", { planId });
 }
 
+export function updateInstallmentPlan(
+  planId: string,
+  input: UpdateInstallmentPlanInput,
+): Promise<InstallmentPlanDto> {
+  return invoke<InstallmentPlanDto>("update_installment_plan", {
+    planId,
+    input,
+  });
+}
+
 export function createCardPayment(
   input: CreateCardPaymentInput,
 ): Promise<CardPaymentDto> {
@@ -253,4 +272,8 @@ export function updateSettings(
   input: UpdateSettingsInput,
 ): Promise<SettingsDto> {
   return invoke<SettingsDto>("update_settings", { input });
+}
+
+export function openAppFolder(folder: "data" | "logs"): Promise<void> {
+  return invoke<void>("open_app_folder", { folder });
 }

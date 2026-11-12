@@ -5,7 +5,9 @@
     useQueryClient,
   } from "@tanstack/svelte-query";
 
-  import { deleteInstallmentPlan, getInstallmentPlan } from "../lib/api";
+  import { deleteInstallmentPlan, getInstallmentPlan, listCategories, updateInstallmentPlan } from "../lib/api";
+  import type { UpdateInstallmentPlanInput } from "../lib/api/bindings";
+  import InstallmentPlanEditModal from "../lib/components/InstallmentPlanEditModal.svelte";
   import { confirmAction } from "../lib/confirm";
   import { normalizeError } from "../lib/errors";
   import {
@@ -21,9 +23,16 @@
 
   const queryClient = useQueryClient();
 
+  let editing = $state(false);
+
   const planQuery = createQuery(() => ({
     queryKey: ["installment-plans", "detail", planId],
     queryFn: () => getInstallmentPlan(planId),
+  }));
+
+  const categoriesQuery = createQuery(() => ({
+    queryKey: ["categories", true],
+    queryFn: () => listCategories(true),
   }));
 
   const deleteMutation = createMutation(() => ({
@@ -35,12 +44,26 @@
     },
   }));
 
+  const updateMutation = createMutation(() => ({
+    mutationFn: (input: UpdateInstallmentPlanInput) =>
+      updateInstallmentPlan(planId, input),
+    onSuccess: () => {
+      void queryClient.invalidateQueries();
+      editing = false;
+      notify("Parcelamento atualizado.");
+    },
+  }));
+
   const plan = $derived(planQuery.data);
   const queryError = $derived(
     planQuery.error ? normalizeError(planQuery.error) : null,
   );
   const actionError = $derived(
-    deleteMutation.error ? normalizeError(deleteMutation.error).message : null,
+    deleteMutation.error
+      ? normalizeError(deleteMutation.error).message
+      : updateMutation.error
+        ? normalizeError(updateMutation.error).message
+        : null,
   );
 
   async function confirmDelete(): Promise<void> {
@@ -75,6 +98,16 @@
   <div class="page-actions">
     {#if plan}
       <a class="button" href="#/cartoes/{plan.card_account_id}">Ver cartão</a>
+      <button
+        type="button"
+        class="button button--primary"
+        onclick={() => {
+          editing = true;
+        }}
+        disabled={updateMutation.isPending}
+      >
+        Editar
+      </button>
       <button
         type="button"
         class="button button--danger"
@@ -143,7 +176,8 @@
       <span class="mono">BLOQUEADO</span>
       <span>
         Este parcelamento possui pagamentos. Remova os pagamentos no cartão
-        antes de excluir.
+        antes de excluir ou de recalcular as parcelas; por enquanto apenas a
+        descrição pode ser editada.
       </span>
     </div>
   {/if}
@@ -211,4 +245,20 @@
       </div>
     {/if}
   </section>
+{/if}
+
+{#if editing && plan}
+  <InstallmentPlanEditModal
+    {plan}
+    categories={categoriesQuery.data ?? []}
+    saving={updateMutation.isPending}
+    error={updateMutation.error
+      ? normalizeError(updateMutation.error).message
+      : null}
+    onsave={(input) => updateMutation.mutate(input)}
+    onclose={() => {
+      editing = false;
+      updateMutation.reset();
+    }}
+  />
 {/if}

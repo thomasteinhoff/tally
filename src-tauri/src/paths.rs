@@ -14,16 +14,23 @@ pub struct AppPaths {
 
 impl AppPaths {
     pub fn resolve<R: Runtime>(app: &AppHandle<R>) -> Result<Self, AppError> {
-        let root = app
-            .path()
-            .local_data_dir()
-            .map_err(|error| {
-                AppError::io(
-                    "não foi possível resolver o diretório de dados do aplicativo",
-                    error.to_string(),
-                )
-            })?
-            .join("Tally");
+        let local = app.path().local_data_dir().map_err(|error| {
+            AppError::io(
+                "não foi possível resolver o diretório de dados do aplicativo",
+                error.to_string(),
+            )
+        })?;
+
+        // O instalador NSIS per-user usa %LOCALAPPDATA%\Tally, o mesmo caminho
+        // usado por versões anteriores para os dados. Quem já tem banco lá
+        // continua nesse diretório; instalações novas usam TallyData para não
+        // misturar dados financeiros com os binários do aplicativo.
+        let legacy_root = local.join("Tally");
+        let root = if legacy_root.join("tally.db").exists() {
+            legacy_root
+        } else {
+            local.join("TallyData")
+        };
 
         Ok(Self {
             db_path: root.join("tally.db"),

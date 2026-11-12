@@ -6,6 +6,7 @@
   import { parseRoute, type Route } from "./lib/router";
   import { dismissToast, toastState } from "./lib/toast.svelte";
   import { requestNewMovement } from "./lib/ui.svelte";
+  import AboutPage from "./pages/AboutPage.svelte";
   import AccountsPage from "./pages/AccountsPage.svelte";
   import CardDetailPage from "./pages/CardDetailPage.svelte";
   import CardsPage from "./pages/CardsPage.svelte";
@@ -70,15 +71,19 @@
                         ? "Relatórios"
                         : route.name === "settings"
                           ? "Configurações"
-                          : "Rota indisponível",
+                          : route.name === "about"
+                            ? "Sobre"
+                            : "Rota indisponível",
   );
 
   function active(section: string): boolean {
     if (section === "accounts") {
-      return route.name === "accounts" || route.name === "statement";
-    }
-    if (section === "cards") {
-      return route.name === "cards" || route.name === "card";
+      return (
+        route.name === "accounts" ||
+        route.name === "statement" ||
+        route.name === "cards" ||
+        route.name === "card"
+      );
     }
     if (section === "installments") {
       return route.name === "installments" || route.name === "installment";
@@ -146,15 +151,7 @@
           aria-current={active("accounts") ? "page" : undefined}
           href="#/contas"
         >
-          Contas
-        </a>
-        <a
-          class="nav-item"
-          class:is-active={active("cards")}
-          aria-current={active("cards") ? "page" : undefined}
-          href="#/cartoes"
-        >
-          Cartões
+          Contas e cartões
         </a>
         <a
           class="nav-item"
@@ -192,6 +189,14 @@
         >
           Configurações
         </a>
+        <a
+          class="nav-item"
+          class:is-active={active("about")}
+          aria-current={active("about") ? "page" : undefined}
+          href="#/sobre"
+        >
+          Sobre
+        </a>
       </div>
     </nav>
 
@@ -212,7 +217,7 @@
   <main class="main">
     <header class="topbar">
       <div class="topbar-left">
-        <span class="eyebrow">Tally / Phase 3</span>
+        <span class="eyebrow">Tally / Phase 4</span>
         <h1>{pageTitle}</h1>
       </div>
       <div class="topbar-right">
@@ -263,6 +268,8 @@
         <ReportsPage />
       {:else if route.name === "settings"}
         <SettingsPage />
+      {:else if route.name === "about"}
+        <AboutPage />
       {:else}
         <section class="panel">
           <div class="state-panel">

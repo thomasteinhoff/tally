@@ -14,6 +14,7 @@ tally-app.workspace = true
 tally-domain.workspace = true
 tokio-rusqlite.workspace = true
 tracing.workspace = true
+uuid.workspace = true
 
 [dev-dependencies]
 tempfile.workspace = true

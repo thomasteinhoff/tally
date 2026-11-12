@@ -37,5 +37,6 @@ export type { ReportFilter } from "./ReportFilter";
 export type { RestoreResultDto } from "./RestoreResultDto";
 export type { SettingsDto } from "./SettingsDto";
 export type { StatementLineDto } from "./StatementLineDto";
+export type { UpdateInstallmentPlanInput } from "./UpdateInstallmentPlanInput";
 export type { UpdateMovementInput } from "./UpdateMovementInput";
 export type { UpdateSettingsInput } from "./UpdateSettingsInput";

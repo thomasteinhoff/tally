@@ -10,6 +10,7 @@ export type Route =
   | { name: "categories" }
   | { name: "reports" }
   | { name: "settings" }
+  | { name: "about" }
   | { name: "unavailable"; path: string };
 
 export function parseRoute(hash: string): Route {
@@ -37,6 +38,8 @@ export function parseRoute(hash: string): Route {
         return { name: "reports" };
       case "configuracoes":
         return { name: "settings" };
+      case "sobre":
+        return { name: "about" };
       default:
         return { name: "unavailable", path };
     }
@@ -81,6 +84,8 @@ export function routeHref(route: Route): string {
       return "#/relatorios";
     case "settings":
       return "#/configuracoes";
+    case "about":
+      return "#/sobre";
     case "unavailable":
       return `#${route.path}`;
   }

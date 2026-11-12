@@ -80,18 +80,43 @@ impl AccountsRepository for SqliteAccountsRepository {
             .await
     }
 
-    async fn rename(&self, id: &str, name: &str) -> Result<AccountDto, AppError> {
+    async fn update(
+        &self,
+        id: &str,
+        name: &str,
+        credit_limit_cents: Option<i64>,
+    ) -> Result<AccountDto, AppError> {
         let id = id.to_owned();
         let name = name.to_owned();
 
         self.db
             .transaction(move |transaction| {
+                if credit_limit_cents.is_some() {
+                    let account_type: String = transaction
+                        .query_row(
+                            "SELECT type FROM accounts WHERE id = ?1 AND is_system = 0",
+                            [&id],
+                            |row| row.get(0),
+                        )
+                        .optional()
+                        .map_err(map_sqlite_error)?
+                        .ok_or_else(|| AppError::not_found("conta não encontrada"))?;
+
+                    if account_type != "credit_card" {
+                        return Err(AppError::validation(
+                            "limite de crédito só existe em cartão de crédito",
+                        ));
+                    }
+                }
+
                 let changed = transaction
                     .execute(
                         "UPDATE accounts
-                         SET name = ?1, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
-                         WHERE id = ?2 AND is_system = 0",
-                        params![name, id],
+                         SET name = ?1,
+                             credit_limit_cents = ?2,
+                             updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+                         WHERE id = ?3 AND is_system = 0",
+                        params![name, credit_limit_cents, id],
                     )
                     .map_err(map_sqlite_error)?;
 

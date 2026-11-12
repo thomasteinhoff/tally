@@ -231,6 +231,8 @@
   </footer>
 </section>
 
+<hr class="report-divider" />
+
 {#if queryError}
   <section class="panel">
     <div class="state-panel state-panel--error" role="alert">
@@ -371,6 +373,8 @@
     </section>
   </div>
 
+  <hr class="report-divider" />
+
   <section class="panel" aria-labelledby="cash-flow-title">
     <header class="panel-header">
       <div class="panel-heading">
@@ -451,7 +455,7 @@
         </table>
       </div>
 
-      <header class="panel-header">
+      <header class="panel-header panel-header--divided">
         <div class="panel-heading">
           <span class="panel-kicker">Origem</span>
           <h3 class="panel-title">Por categoria e tipo</h3>
@@ -488,6 +492,8 @@
     {/if}
   </section>
 
+  <hr class="report-divider" />
+
   <div class="overview-grid">
     <section class="panel" aria-labelledby="net-worth-title">
       <header class="panel-header">
@@ -509,7 +515,7 @@
       {:else if !netWorth}
         <div class="empty-panel"><p>Patrimônio indisponível.</p></div>
       {:else}
-        <div class="data-grid">
+        <div class="data-grid data-grid--auto">
           <div class="data-cell">
             <div class="data-label">Patrimônio líquido</div>
             <div
@@ -587,7 +593,7 @@
       {:else if !commitments}
         <div class="empty-panel"><p>Compromissos indisponíveis.</p></div>
       {:else}
-        <div class="data-grid">
+        <div class="data-grid data-grid--auto">
           <div class="data-cell">
             <div class="data-label">Em aberto</div>
             <div class="data-value">
@@ -617,7 +623,7 @@
           </div>
         {:else}
           {#each commitments.months as month (month.month)}
-            <header class="panel-header">
+            <header class="panel-header panel-header--divided">
               <div class="panel-heading">
                 <span class="panel-kicker">{formatMonth(month.month)}</span>
                 <h3 class="panel-title">

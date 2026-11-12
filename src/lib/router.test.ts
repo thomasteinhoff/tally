@@ -25,6 +25,7 @@ describe("parseRoute", () => {
     expect(parseRoute("#/categorias")).toEqual({ name: "categories" });
     expect(parseRoute("#/relatorios")).toEqual({ name: "reports" });
     expect(parseRoute("#/configuracoes")).toEqual({ name: "settings" });
+    expect(parseRoute("#/sobre")).toEqual({ name: "about" });
   });
 
   it("preserva query string fora da rota e rejeita caminhos desconhecidos", () => {
@@ -61,6 +62,7 @@ describe("routeHref", () => {
     expect(routeHref({ name: "categories" })).toBe("#/categorias");
     expect(routeHref({ name: "reports" })).toBe("#/relatorios");
     expect(routeHref({ name: "settings" })).toBe("#/configuracoes");
+    expect(routeHref({ name: "about" })).toBe("#/sobre");
     expect(routeHref({ name: "unavailable", path: "/x" })).toBe("#/x");
   });
 });

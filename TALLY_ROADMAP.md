@@ -171,11 +171,141 @@ Validações realizadas:
 - `npm run build` passou
 - `npm run tauri build -- --no-bundle` passou
 
-### Próximo trabalho
+### Phase 4 — Finish & Distribution
 
-**Phase 4 — Finish & Distribution**
+**STATUS: COMPLETA.**
 
-Não iniciar Phase 4 sem autorização explícita.
+Bloco 4.1 entregue (correções funcionais e financeiras):
+
+- ajuste de saldo mostra o saldo atual da conta e a prévia do saldo resultante;
+- ajuste com modos explícitos “Somar ao saldo”, “Subtrair do saldo” e “Definir novo saldo”; edição mantém valor assinado;
+- cartão só aparece em movimentações compatíveis (ajuste); compras e pagamentos seguem fluxos próprios;
+- limite de crédito editável depois da criação, com validação no backend;
+- cartão continua passivo, com “Dívida inicial (passivo)” e ajuda explícita; decisão aprovada de manter a dívida inicial;
+- edição de parcelamento disponível no detalhe: sem pagamentos recalcula total, parcelas, vencimentos, categoria, período e descrição; com pagamentos permite apenas descrição;
+- extrato e detalhes da conta exibem lançamentos da data mais recente para a mais antiga, preservando o saldo corrente por linha;
+- transferências exibidas com cor neutra no extrato e nas movimentações, sem cor de despesa/receita;
+- modal só fecha quando o clique começa e termina no fundo, sem fechar ao selecionar texto ou arrastar para fora.
+
+Validações do Bloco 4.1:
+
+- `cargo fmt --all -- --check` passou
+- `cargo clippy --workspace --all-targets -- -D warnings` passou
+- `cargo test --workspace` passou (novos testes de edição de parcelamento)
+- `npm run check` sem erros/warnings
+- `npm test` passou
+- `npm run build` passou
+- `npm run tauri build -- --no-bundle` passou
+
+Validação manual do Bloco 4.1: **aprovada pelo usuário**.
+
+Bloco 4.2 entregue (fluxos de uso e navegação):
+
+- formulário único adaptativo para despesa, receita, transferência, ajuste, compra no cartão e pagamento de cartão, com campos e validações específicos por tipo;
+- despacho único em `movement-submit.ts` para os comandos existentes do backend, sem alterar regras contábeis;
+- `CardPurchaseModal` e `CardPaymentModal` removidos; o mesmo `MovementFormModal` atende livro, lista de cartões e detalhe do cartão;
+- “Compra no cartão” e “Pagar” continuam abrindo o fluxo já no tipo correto, com cartão pré-selecionado;
+- navegação lateral unificada em “Contas e cartões”, com alternância entre as visões de Contas e Cartões e cartões preservados como passivos;
+- nome da conta clicável nas movimentações, levando ao extrato da conta ou ao detalhe do cartão conforme o tipo;
+- limite de cartão exibido como `disponível / total` na lista e no detalhe;
+- dashboard reorganizado: patrimônio líquido, ativos, passivos e resultado em destaque; últimos lançamentos em painel próprio e compromissos separados.
+
+Validações do Bloco 4.2:
+
+- `cargo fmt --all -- --check` passou
+- `cargo clippy --workspace --all-targets -- -D warnings` passou
+- `cargo test --workspace` passou
+- `npm run check` sem erros/warnings
+- `npm test` passou (23 testes, incluindo `formatLimit` e despacho do formulário único)
+- `npm run build` passou
+- `npm run tauri build -- --no-bundle` passou
+
+Validação manual do Bloco 4.2: **aprovada pelo usuário**.
+
+Checkpoint para retomada: próximo é o Bloco 4.3 (layout/dashboard, uso da largura da janela, redução de espaços e correção de quebras). Nada foi commitado; `HEAD` continua em `6b3e4e2`.
+
+Bloco 4.3 entregue (layout e dashboard):
+
+- conteúdo passa a usar a largura da janela: `max-width` de 1120px para 1440px e paddings/topbar reduzidos, sem esticar linhas de texto;
+- dashboard separa explicitamente patrimônio líquido (`ativos − passivos`) de ativos, passivos e resultado do mês;
+- resumos em destaque passam a 2×2 abaixo de 1180px e o `overview-grid` empilha nessa faixa, evitando valores espremidos em janelas de 1024–1180px;
+- `data-grid--auto` (auto-fit `minmax(160px, 1fr)`) corrige células apertadas nos painéis de meia largura do dashboard e do patrimônio nos relatórios;
+- tabela de maiores despesas do dashboard não força mais rolagem horizontal de 880px;
+- espaçamentos internos reduzidos em page-intro, painéis, células de resumo, filtros e listas; títulos e valores reequilibrados;
+- responsivo de 920px revisado (sidebar oculta, conteúdo com padding menor).
+
+Validações do Bloco 4.3:
+
+- `cargo fmt --all -- --check` passou
+- `cargo clippy --workspace --all-targets -- -D warnings` passou
+- `cargo test --workspace` passou
+- `npm run check` sem erros/warnings
+- `npm test` passou (23 testes)
+- `npm run build` passou
+- `npm run tauri build -- --no-bundle` passou
+
+Validação manual do Bloco 4.3: **aprovada pelo usuário**.
+
+Checkpoint para retomada: próximo é o Bloco 4.4 (relatórios/tabelas/rolagem, estado de compromissos, colunas redundantes e refinamento de estados, validação, acessibilidade e consistência). Nada foi commitado; `HEAD` continua em `6b3e4e2`.
+
+Bloco 4.4 entregue (relatórios, tabelas e refinamento):
+
+- valores numéricos importantes com mais peso: patrimônio líquido, resumos, células de dados, valores do dashboard e colunas numéricas das tabelas;
+- Relatórios com divisórias horizontais entre filtros, quebras por categoria, fluxo de caixa e patrimônio/compromissos; sub-blocos do fluxo de caixa e meses de compromissos também ganharam separador;
+- barra lateral fixa: permanece no lugar enquanto o conteúdo principal rola;
+- corrigida a área cinza no resumo de compromissos dos relatórios (células preenchem a largura disponível);
+- removida a coluna “Criada em” de Contas e Categorias, junto do ID abreviado da conta, liberando largura para nome, tipo, situação e ações;
+- tabelas de relatórios em painéis de meia largura não impõem mais largura mínima fixa, evitando rolagem horizontal desnecessária;
+- estados de carregamento, erro e vazio conferidos nas telas, sem introduzir novos padrões ou mudanças de paleta.
+
+Validações do Bloco 4.4:
+
+- `cargo fmt --all -- --check` passou
+- `cargo clippy --workspace --all-targets -- -D warnings` passou
+- `cargo test --workspace` passou
+- `npm run check` sem erros/warnings
+- `npm test` passou (23 testes)
+- `npm run build` passou
+- `npm run tauri build -- --no-bundle` passou
+
+Bloco 4.5 entregue (finalização e distribuição Windows):
+
+- tela **Sobre** (`#/sobre`) com versão, schema, contas de sistema, caminhos reais de banco/dados, aviso de preservação de dados, atalhos e link do repositório;
+- botões **Abrir pasta de dados** e **Abrir logs** via comando Rust `open_app_folder`, restrito às pastas do app;
+- **primeiros passos** na Visão geral enquanto não existir conta cadastrada: criar conta, lançar movimentação e criar backup;
+- restauração de backup em Configurações passou a usar o diálogo nativo de confirmação, igual às demais ações destrutivas;
+- atalho `Ctrl+N` (nova movimentação) e `Esc` (fechar modal) documentados na tela Sobre;
+- diretório de dados: instalações novas usam `%LOCALAPPDATA%\TallyData`; quem já tem banco em `%LOCALAPPDATA%\Tally` continua lá, sem migração e sem risco de perda;
+- instalador NSIS per-user gerado, com WebView2 offline embutido.
+
+Instalador gerado:
+
+- `target\release\bundle\nsis\Tally_0.1.0_x64-setup.exe` (aprox. 211 MiB, WebView2 offline incluído);
+- instalação por usuário em `%LOCALAPPDATA%\Tally`, sem exigir administrador;
+- desinstalador remove apenas binários, atalhos e registro; banco, backups, exportações e logs permanecem;
+- o checkbox “delete app data” do NSIS remove apenas `%APPDATA%\com.tally.app` e `%LOCALAPPDATA%\com.tally.app` (cache do WebView), nunca a pasta de dados financeiros.
+
+Validações do Bloco 4.5:
+
+- `cargo fmt --all -- --check` passou
+- `cargo clippy --workspace --all-targets -- -D warnings` passou
+- `cargo test --workspace` passou
+- `npm run check` sem erros/warnings
+- `npm test` passou (23 testes)
+- `npm run build` passou
+- `npm run tauri build` passou, com bundle NSIS
+
+Roteiro de validação manual: **aprovado pelo usuário** (instalação, atualização e desinstalação verificadas).
+
+Estado final da distribuição Windows:
+
+- instalador `Tally_0.1.0_x64-setup.exe` per-user, sem exigir administrador;
+- WebView2 offline embutido, sem dependência de download no primeiro uso;
+- nenhum requisito de Node, Rust ou SQLite para o usuário final;
+- dados financeiros preservados em atualização, reinstalação e desinstalação;
+- logs diários em `logs/tally.log`, diagnóstico, backup, restauração e exportação CSV disponíveis em Configurações/Sobre.
+
+**Phase 4 concluída em 2026-11-12.** Commit consolidado publicado em `origin/main` com todo o escopo dos Blocos 4.1–4.5, sem mudanças adicionais de produto.
 
 ---
 

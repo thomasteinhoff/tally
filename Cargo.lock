@@ -3497,6 +3497,7 @@ dependencies = [
  "tokio",
  "tokio-rusqlite",
  "tracing",
+ "uuid",
 ]
 
 [[package]]

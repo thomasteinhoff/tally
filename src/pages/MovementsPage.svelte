@@ -10,21 +10,13 @@
     MovementFilter,
   } from "../lib/api/bindings";
   import {
-    createAdjustment,
-    createCardPurchase,
-    createExpense,
-    createIncome,
-    createTransfer,
     deleteMovement,
     listAccounts,
     listCards,
     listCategories,
     listMovements,
-    updateMovement,
   } from "../lib/api";
-  import CardPurchaseModal from "../lib/components/CardPurchaseModal.svelte";
   import MovementFormModal from "../lib/components/MovementFormModal.svelte";
-  import Modal from "../lib/components/Modal.svelte";
   import { confirmAction } from "../lib/confirm";
   import { normalizeError } from "../lib/errors";
   import {
@@ -35,7 +27,8 @@
     paymentLabel,
     periodLabel,
   } from "../lib/format";
-  import type { SaveMovementRequest } from "../lib/movement-form";
+  import type { MovementFormRequest } from "../lib/movement-form";
+  import { submitMovementForm } from "../lib/movement-submit";
   import { notify } from "../lib/toast.svelte";
   import { uiState } from "../lib/ui.svelte";
 
@@ -51,8 +44,6 @@
     to: "",
   });
   let composerOpen = $state(false);
-  let chooserOpen = $state(false);
-  let cardComposerOpen = $state(false);
   let editing = $state<MovementDto | null>(null);
   let startedTime = $state("");
   let deleteError = $state<string | null>(null);
@@ -88,7 +79,7 @@
   }));
 
   const saveMutation = createMutation(() => ({
-    mutationFn: (request: SaveMovementRequest) => saveRequest(request),
+    mutationFn: (request: MovementFormRequest) => submitMovementForm(request),
     onSuccess: () => {
       void queryClient.invalidateQueries();
       composerOpen = false;
@@ -106,22 +97,8 @@
     },
   }));
 
-  const cardPurchaseMutation = createMutation(() => ({
-    mutationFn: createCardPurchase,
-    onSuccess: () => {
-      void queryClient.invalidateQueries();
-      cardComposerOpen = false;
-      notify("Compra lançada.");
-    },
-  }));
-
   const saveError = $derived(
     saveMutation.error ? normalizeError(saveMutation.error).message : null,
-  );
-  const cardPurchaseError = $derived(
-    cardPurchaseMutation.error
-      ? normalizeError(cardPurchaseMutation.error).message
-      : null,
   );
   const queryError = $derived(
     movementsQuery.error ? normalizeError(movementsQuery.error) : null,
@@ -168,6 +145,18 @@
       : `${count}x a partir de ${formatCents(first)} · total da compra`;
   }
 
+  function primaryAccountHref(movement: MovementDto): string {
+    return movement.kind === "card_purchase"
+      ? `#/cartoes/${movement.primary_account_id}`
+      : `#/contas/${movement.primary_account_id}`;
+  }
+
+  function counterpartyAccountHref(movement: MovementDto): string {
+    return movement.kind === "card_payment"
+      ? `#/cartoes/${movement.counterparty_account_id}`
+      : `#/contas/${movement.counterparty_account_id}`;
+  }
+
   $effect(() => {
     if (uiState.openNewMovementRequested) {
       uiState.openNewMovementRequested = false;
@@ -179,26 +168,7 @@
     editing = null;
     startedTime = currentTime();
     saveMutation.reset();
-    cardPurchaseMutation.reset();
-    chooserOpen = true;
-  }
-
-  function startSimple(): void {
-    chooserOpen = false;
     composerOpen = true;
-  }
-
-  function startCard(): void {
-    chooserOpen = false;
-    cardComposerOpen = true;
-  }
-
-  function closeCardComposer(): void {
-    if (cardPurchaseMutation.isPending) {
-      return;
-    }
-    cardComposerOpen = false;
-    cardPurchaseMutation.reset();
   }
 
   function openEdit(movement: MovementDto): void {
@@ -242,76 +212,6 @@
       deleteMutation.mutate(movement.id);
     }
   }
-
-  async function saveRequest(request: SaveMovementRequest): Promise<MovementDto> {
-    const { draft } = request;
-    const shared = {
-      account_id: draft.primaryAccountId,
-      category_id: draft.categoryId || null,
-      amount_cents: draft.amountCents,
-      occurred_on: draft.occurredOn,
-      occurred_time: draft.occurredTime || null,
-      manual_period: draft.manualPeriod || null,
-      description: draft.description.trim() || null,
-    };
-
-    if (request.mode === "edit") {
-      if (!request.id) {
-        throw new Error("Movimentação sem identificador.");
-      }
-
-      return updateMovement(request.id, {
-        kind: draft.kind,
-        primary_account_id: draft.primaryAccountId,
-        counterparty_account_id: draft.counterpartyAccountId || null,
-        category_id: draft.categoryId || null,
-        amount_cents: draft.amountCents,
-        occurred_on: draft.occurredOn,
-        occurred_time: draft.occurredTime || null,
-        manual_period: draft.manualPeriod || null,
-        description: draft.description.trim() || null,
-        payment_method: draft.paymentMethod || null,
-      });
-    }
-
-    switch (draft.kind) {
-      case "expense":
-        if (!shared.category_id || !draft.paymentMethod) {
-          throw new Error("Categoria e método são obrigatórios.");
-        }
-        return createExpense({
-          ...shared,
-          category_id: shared.category_id,
-          payment_method: draft.paymentMethod,
-        });
-      case "income":
-        if (!shared.category_id || !draft.paymentMethod) {
-          throw new Error("Categoria e método são obrigatórios.");
-        }
-        return createIncome({
-          ...shared,
-          category_id: shared.category_id,
-          payment_method: draft.paymentMethod,
-        });
-      case "transfer":
-        return createTransfer({
-          from_account_id: draft.primaryAccountId,
-          to_account_id: draft.counterpartyAccountId,
-          amount_cents: draft.amountCents,
-          occurred_on: draft.occurredOn,
-          occurred_time: draft.occurredTime || null,
-          manual_period: draft.manualPeriod || null,
-          description: draft.description.trim() || null,
-        });
-      case "adjustment":
-        return createAdjustment({
-          account_id: draft.primaryAccountId,
-          amount_cents: draft.amountCents,
-          occurred_on: draft.occurredOn,
-          description: draft.description.trim() || null,
-        });
-    }
-  }
 </script>
 
 <section class="page-intro">
@@ -319,9 +219,8 @@
     <span class="eyebrow">Livro</span>
     <h2>Movimentações</h2>
     <p>
-      Despesas, receitas, transferências e ajustes publicados em partidas
-      dobradas. Compras à vista ou parceladas no cartão também são lançadas por
-      aqui.
+      Despesas, receitas, transferências, ajustes, compras e pagamentos de
+      cartão em um único fluxo, publicados em partidas dobradas.
     </p>
   </div>
   <button type="button" class="button button--primary" onclick={openNew}>
@@ -502,9 +401,18 @@
               </td>
               <td>
                 <div class="cell-stack">
-                  <span>{movement.primary_account_name}</span>
-                  {#if movement.counterparty_account_name}
-                    <small>→ {movement.counterparty_account_name}</small>
+                  <a class="text-link" href={primaryAccountHref(movement)}>
+                    {movement.primary_account_name}
+                  </a>
+                  {#if movement.counterparty_account_id && movement.counterparty_account_name}
+                    <small>
+                      → <a
+                        class="text-link"
+                        href={counterpartyAccountHref(movement)}
+                      >
+                        {movement.counterparty_account_name}
+                      </a>
+                    </small>
                   {/if}
                 </div>
               </td>
@@ -513,8 +421,11 @@
               <td>{periodLabel(movement.period)}</td>
               <td
                 class="mono align-right"
-                class:amount-negative={movement.amount_cents < 0}
-                class:amount-positive={movement.amount_cents > 0}
+                class:amount-negative={movement.amount_cents < 0 &&
+                  movement.kind !== "transfer"}
+                class:amount-positive={movement.amount_cents > 0 &&
+                  movement.kind !== "transfer"}
+                class:amount-neutral={movement.kind === "transfer"}
               >
                 {formatCents(movement.amount_cents)}
                 {#if movement.kind === "card_purchase"}
@@ -574,39 +485,12 @@
   {/if}
 </section>
 
-{#if chooserOpen}
-  <Modal title="Nova movimentação" onclose={() => (chooserOpen = false)}>
-    <p class="form-hint">
-      Escolha se o lançamento é uma movimentação simples ou uma compra no
-      cartão, à vista ou parcelada.
-    </p>
-    <footer class="form-actions">
-      <button type="button" class="button" onclick={startSimple}>
-        Despesa, receita ou transferência
-      </button>
-      <button type="button" class="button button--primary" onclick={startCard}>
-        Compra no cartão
-      </button>
-    </footer>
-  </Modal>
-{/if}
-
-{#if cardComposerOpen}
-  <CardPurchaseModal
-    cards={cards}
-    {categories}
-    saving={cardPurchaseMutation.isPending}
-    error={cardPurchaseError}
-    onsave={(input) => cardPurchaseMutation.mutate(input)}
-    onclose={closeCardComposer}
-  />
-{/if}
-
 {#if composerOpen}
   {#key editing?.id ?? "new"}
     <MovementFormModal
       {accounts}
       {categories}
+      {cards}
       movement={editing}
       {startedTime}
       saving={saveMutation.isPending}

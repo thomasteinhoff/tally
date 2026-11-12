@@ -16,7 +16,7 @@
   import CategoryFormModal from "../lib/components/CategoryFormModal.svelte";
   import { confirmAction } from "../lib/confirm";
   import { normalizeError } from "../lib/errors";
-  import { formatDate, kindLabel } from "../lib/format";
+  import { kindLabel } from "../lib/format";
   import type { CategoryFormRequest } from "../lib/form-types";
   import { notify } from "../lib/toast.svelte";
 
@@ -238,7 +238,6 @@
           <tr>
             <th scope="col">Categoria</th>
             <th scope="col">Tipo</th>
-            <th scope="col">Criada em</th>
             <th scope="col">Situação</th>
             <th scope="col" class="align-right">Ações</th>
           </tr>
@@ -252,7 +251,6 @@
                   >{kindLabel(category.kind)}</span
                 >
               </td>
-              <td>{formatDate(category.created_at.slice(0, 10))}</td>
               <td>
                 {#if category.archived_at}
                   <span class="tag tag--archived">Arquivada</span>

@@ -21,6 +21,19 @@ export function formatCents(cents: number): string {
   return `${sign}R$ ${groupThousands(reais)},${centavos}`;
 }
 
+/** Disponível e limite no formato `R$ 1.400,00 / R$ 2.000,00`. */
+export function formatLimit(
+  availableCents: number | null,
+  totalCents: number | null,
+): string {
+  if (totalCents === null) {
+    return "—";
+  }
+  const available =
+    availableCents === null ? "—" : formatCents(availableCents);
+  return `${available} / ${formatCents(totalCents)}`;
+}
+
 /** Valor sem sinal para campos de formulário. */
 export function formatAmountInput(cents: number): string {
   const raw = String(Math.abs(cents)).padStart(3, "0");
