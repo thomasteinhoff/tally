@@ -1380,3 +1380,115 @@ Próximo trabalho: Phase 4 — Finish & Distribution.
 
 Não iniciar a Phase 4 sem autorização explícita. Não implementar refinamento visual amplo ou funcionalidades V2 antecipadamente.
 
+---
+
+# 16. Identidade visual — estágios 1 e 2 (em revisão)
+
+Trabalho de redesign visual conduzido em estágios, sem alterar regras
+financeiras, comandos Rust, schema SQLite ou dependências de produção.
+
+## Concluído
+
+- Auditoria de CSS, componentes, contraste e fontes.
+- Fundação de tokens centralizada em `src/app.css` (cores, tipografia, espaço,
+  forma, movimento) para tema claro e escuro.
+- Fontes IBM Plex Sans/Mono auto-hospedadas em `src/assets/fonts/`
+  (SIL OFL 1.1). Avenir Next não incluída por licença; `--font-wordmark`
+  preparada para recebê-la.
+- Tema Claro/Escuro/Sistema com persistência em `localStorage`
+  (`tally.theme`), sem tocar no banco nem no Rust.
+  Arquivos: `src/lib/theme.ts`, `src/lib/theme.svelte.ts`, `src/lib/theme.test.ts`.
+- Shell (`src/App.svelte`): rail oliva fixo, símbolo oficial em SVG inline,
+  seletor de tema no topbar, topbar simplificado.
+- Protótipo de identidade na Visão geral (`src/pages/OverviewPage.svelte`):
+  hero de extrato com patrimônio, ativos, passivos e resultado do mês.
+
+## Pendente de aprovação
+
+- Estágio 3: expansão do vocabulário visual às demais telas.
+- Regenerar ícones do app a partir de `tally.png` (`npx tauri icon`).
+- Validar visualmente em `npm run tauri dev` (claro, escuro, sistema).
+
+Nenhuma fase anterior foi alterada; este registro é aditivo.
+
+---
+
+# 17. Refinamento visual — estágio 3 (em avaliação)
+
+Continuação do trabalho de identidade. Sem mudanças em regras financeiras,
+schema SQLite, comandos Rust ou dependências.
+
+## Concluído
+
+- **Modo escuro grafite**: fundo `#292B29`, superfícies `#363936`/`#41443F`,
+  rail oliva `#343D35`, terracota como acento. Contraste revalidado
+  (texto ≥ 4,5:1; controles ≥ 3:1). Tema claro preservado.
+- **Configurações + Sobre unificados** em `#/configuracoes`, organizados em
+  Aparência, Aplicativo, Dados (integridade, backups, exportação) e Sobre.
+  A rota antiga `#/sobre` redireciona para Configurações.
+- **Visão geral + Relatórios unificados** em `#/`: resumo no topo
+  (patrimônio, ativos, passivos, resultado do mês, mês corrente, últimos
+  lançamentos e compromissos) e, abaixo, análises com filtros próprios (gastos,
+  receitas, fluxo de caixa, patrimônio e compromissos). O topo de despesas do
+  mês passa a ser o detalhamento por categoria dentro das análises. Os filtros
+  não alteram o resumo. A rota antiga `#/relatorios` redireciona para a Visão
+  geral.
+- **Símbolo centralizado** em `src/lib/brand.ts` e
+  `src/lib/components/BrandMark.svelte`; nenhum outro ponto desenha o símbolo.
+  Referência oficial permanece `tally.png`.
+
+## Decisão futura registrada
+
+- Revisar o desenho do símbolo para melhorar a legibilidade em tamanhos
+  pequenos (barra lateral, barra de título e ícone do aplicativo). Os traços
+  finos atuais podem desaparecer em 16–24 px. Não redesenhar sem aprovação.
+- Quando o símbolo for revisado, regenerar `src-tauri/icons` com
+  `npx tauri icon tally.png`.
+- Validação visual manual dos dois temas permanece pendente de aprovação.
+
+---
+
+# 18. Visão geral — hierarquia e ícones do Windows (em avaliação)
+
+Continuação do estágio 3. Sem mudanças em regras financeiras, cálculos,
+schema SQLite, arquitetura ou dependências. Os filtros de análise continuam
+isolados do resumo.
+
+## Concluído
+
+- **Nova ordem da Visão geral**: patrimônio → contas e cartões → resumo do mês
+  e compromissos → últimos lançamentos → análises.
+- **Contas e cartões no topo**: saldo atual por conta (nome, tipo, saldo) e,
+  para cartões, limite total, disponível e dívida, com link para a página de
+  cada registro. Limite de cartão não entra no patrimônio. Dados vêm de
+  `list_accounts`/`list_cards`, portanto não mudam com o filtro de análise.
+- **Compromissos mais acima**: vencidos e comprometido nos próximos 12 meses
+  no resumo; detalhamento mês a mês nas análises, sem repetir os totais.
+- **Patrimônio histórico**: a análise de patrimônio só aparece quando uma data
+  final é escolhida (`Até`), com a posição naquela data; sem data, o topo já
+  mostra a posição atual.
+- **Filtro "Período de análise"**: escopo explícito (só as análises abaixo),
+  intervalo selecionado visível, "Limpar filtros" com estado desabilitado e
+  datas com referência pt-BR (`dd/mm/aaaa`) ao lado do controle nativo.
+- **Gráfico de gastos e receitas**: barras horizontais ordenadas do maior para
+  o menor, valor e percentual do total; top 8 + "Outras" quando necessário.
+  O detalhamento completo (com contagem e total) permanece em `<details>`.
+  Lógica pura em `src/lib/category-chart.ts`, testada em
+  `src/lib/category-chart.test.ts`; componente em
+  `src/lib/components/CategoryBars.svelte`.
+- **Ícones do Windows**: `src-tauri/icons` regenerado a partir de `tally.png`
+  com `npx tauri icon tally.png` (ICO 16/24/32/48/64/256). O bundle já apontava
+  para esses arquivos; `installerIcon` e `uninstallerIcon` foram adicionados ao
+  NSIS para o instalador deixar de usar o ícone genérico. `npm run tauri build`
+  gerou exe e `Tally_0.1.0_x64-setup.exe` com o novo ícone.
+
+## Pendente de aprovação visual
+
+- Conferir densidade da nova ordem em claro e escuro.
+- Testar o ícone em instalação limpa (atalho, barra de tarefas, instalador) e
+  limpar o cache de ícones do Windows se necessário.
+- A revisão do desenho do símbolo para tamanhos pequenos continua como decisão
+  futura; nenhum traço foi alterado nesta etapa.
+
+
+

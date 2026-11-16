@@ -8,9 +8,7 @@ export type Route =
   | { name: "installments" }
   | { name: "installment"; planId: string }
   | { name: "categories" }
-  | { name: "reports" }
   | { name: "settings" }
-  | { name: "about" }
   | { name: "unavailable"; path: string };
 
 export function parseRoute(hash: string): Route {
@@ -35,11 +33,12 @@ export function parseRoute(hash: string): Route {
       case "categorias":
         return { name: "categories" };
       case "relatorios":
-        return { name: "reports" };
+        // Unificada com a Visão geral; mantém links antigos funcionando.
+        return { name: "overview" };
       case "configuracoes":
-        return { name: "settings" };
       case "sobre":
-        return { name: "about" };
+        // Sobre foi unificado em Configurações.
+        return { name: "settings" };
       default:
         return { name: "unavailable", path };
     }
@@ -80,12 +79,8 @@ export function routeHref(route: Route): string {
       return `#/parcelamentos/${encodeURIComponent(route.planId)}`;
     case "categories":
       return "#/categorias";
-    case "reports":
-      return "#/relatorios";
     case "settings":
       return "#/configuracoes";
-    case "about":
-      return "#/sobre";
     case "unavailable":
       return `#${route.path}`;
   }

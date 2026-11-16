@@ -4,9 +4,14 @@
   import { getBootstrap } from "./lib/api";
   import { normalizeError } from "./lib/errors";
   import { parseRoute, type Route } from "./lib/router";
+  import {
+    setThemePreference,
+    themeState,
+  } from "./lib/theme.svelte";
+  import { THEME_LABELS, THEME_PREFERENCES } from "./lib/theme";
   import { dismissToast, toastState } from "./lib/toast.svelte";
   import { requestNewMovement } from "./lib/ui.svelte";
-  import AboutPage from "./pages/AboutPage.svelte";
+  import BrandMark from "./lib/components/BrandMark.svelte";
   import AccountsPage from "./pages/AccountsPage.svelte";
   import CardDetailPage from "./pages/CardDetailPage.svelte";
   import CardsPage from "./pages/CardsPage.svelte";
@@ -15,7 +20,6 @@
   import InstallmentsPage from "./pages/InstallmentsPage.svelte";
   import MovementsPage from "./pages/MovementsPage.svelte";
   import OverviewPage from "./pages/OverviewPage.svelte";
-  import ReportsPage from "./pages/ReportsPage.svelte";
   import SettingsPage from "./pages/SettingsPage.svelte";
   import StatementPage from "./pages/StatementPage.svelte";
 
@@ -67,13 +71,9 @@
                     ? "Parcelamento"
                     : route.name === "categories"
                       ? "Categorias"
-                      : route.name === "reports"
-                        ? "Relatórios"
-                        : route.name === "settings"
-                          ? "Configurações"
-                          : route.name === "about"
-                            ? "Sobre"
-                            : "Rota indisponível",
+                      : route.name === "settings"
+                        ? "Configurações"
+                        : "Rota indisponível",
   );
 
   function active(section: string): boolean {
@@ -119,7 +119,8 @@
 <div class="app-shell">
   <aside class="sidebar">
     <a class="brand" href="#/" aria-label="Tally — visão geral">
-      <span class="brand-mark" aria-hidden="true"></span>
+      <!-- Símbolo oficial centralizado em BrandMark / brand.ts. -->
+      <BrandMark class="brand-mark" />
       <div>
         <span class="brand-name">Tally</span>
         <span class="brand-sub">precisão financeira</span>
@@ -175,33 +176,16 @@
         </a>
         <a
           class="nav-item"
-          class:is-active={active("reports")}
-          aria-current={active("reports") ? "page" : undefined}
-          href="#/relatorios"
-        >
-          Relatórios
-        </a>
-        <a
-          class="nav-item"
           class:is-active={active("settings")}
           aria-current={active("settings") ? "page" : undefined}
           href="#/configuracoes"
         >
           Configurações
         </a>
-        <a
-          class="nav-item"
-          class:is-active={active("about")}
-          aria-current={active("about") ? "page" : undefined}
-          href="#/sobre"
-        >
-          Sobre
-        </a>
       </div>
     </nav>
 
     <div class="sidebar-footer">
-      <span class="sidebar-note">local-first · offline</span>
       <div class="status-line">
         <span
           class="status-dot"
@@ -210,6 +194,7 @@
         ></span>
         <span>{statusLabel}</span>
       </div>
+      <span class="sidebar-note">local-first · offline</span>
       <span class="sidebar-note">Ctrl+N · nova movimentação</span>
     </div>
   </aside>
@@ -217,10 +202,63 @@
   <main class="main">
     <header class="topbar">
       <div class="topbar-left">
-        <span class="eyebrow">Tally / Phase 4</span>
         <h1>{pageTitle}</h1>
       </div>
       <div class="topbar-right">
+        <span class="version">v{data?.app_version ?? "—"}</span>
+        <div class="theme-switch" role="group" aria-label="Tema da interface">
+          {#each THEME_PREFERENCES as preference (preference)}
+            <button
+              type="button"
+              class="theme-switch-item"
+              class:is-active={themeState.preference === preference}
+              aria-pressed={themeState.preference === preference}
+              aria-label={THEME_LABELS[preference]}
+              title={THEME_LABELS[preference]}
+              onclick={() => setThemePreference(preference)}
+            >
+              {#if preference === "light"}
+                <svg
+                  viewBox="0 0 16 16"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="1.4"
+                  stroke-linecap="round"
+                  aria-hidden="true"
+                >
+                  <circle cx="8" cy="8" r="3.1" />
+                  <path
+                    d="M8 1v1.6M8 13.4V15M1 8h1.6M13.4 8H15M3 3l1.1 1.1M11.9 11.9 13 13M13 3l-1.1 1.1M4.1 11.9 3 13"
+                  />
+                </svg>
+              {:else if preference === "dark"}
+                <svg
+                  viewBox="0 0 16 16"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="1.4"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  aria-hidden="true"
+                >
+                  <path d="M13.4 9.7A5.7 5.7 0 0 1 6.3 2.6a5.9 5.9 0 1 0 7.1 7.1Z" />
+                </svg>
+              {:else}
+                <svg
+                  viewBox="0 0 16 16"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="1.4"
+                  stroke-linecap="round"
+                  aria-hidden="true"
+                >
+                  <rect x="1.6" y="2.6" width="12.8" height="8.4" rx="1.2" />
+                  <path d="M5.6 13.6h4.8M8 11v2.6" />
+                </svg>
+              {/if}
+            </button>
+          {/each}
+        </div>
         {#if route.name !== "movements"}
           <button
             type="button"
@@ -230,18 +268,6 @@
             Nova movimentação
           </button>
         {/if}
-        <span class="version">v{data?.app_version ?? "—"}</span>
-        <span
-          class="badge"
-          class:badge--ok={Boolean(data?.integrity.ok)}
-          class:badge--warn={Boolean(data && !data.integrity.ok)}
-        >
-          {data
-            ? data.integrity.ok
-              ? "SQLite ok"
-              : "SQLite atenção"
-            : "aguardando"}
-        </span>
       </div>
     </header>
 
@@ -264,12 +290,8 @@
         <InstallmentDetailPage planId={route.planId} />
       {:else if route.name === "categories"}
         <CategoriesPage />
-      {:else if route.name === "reports"}
-        <ReportsPage />
       {:else if route.name === "settings"}
         <SettingsPage />
-      {:else if route.name === "about"}
-        <AboutPage />
       {:else}
         <section class="panel">
           <div class="state-panel">
