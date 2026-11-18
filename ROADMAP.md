@@ -24,8 +24,10 @@
 - `origin/main` = `957bf37`; tag `v0.1.0` aponta para `82105cf`.
 - v0.2.0 em andamento: **Etapa 1 concluída** em
   `ca80d70e03e43758420d5c67568e8ab375ff4500`
-  (`feat: ordena movimentações cronologicamente e ajusta formulário`);
-  Etapas 2–5 pendentes.
+  (`feat: ordena movimentações cronologicamente e ajusta formulário`).
+- **Etapa 2 concluída** em `81977c84efd03bc4dcb4592f7893fba12afad167`
+  (`feat: adiciona ícones de categoria e seletor com suporte visual`);
+  Etapas 3–5 pendentes.
 - Repositório público com descrição e topics atualizados; sem homepage e sem
   arquivo `LICENSE` (o `Cargo.toml` declara MIT).
 - `package.json` ainda declara versão `0.1.0`; a atualização de versão faz parte
@@ -281,7 +283,16 @@ dos links nos temas claro e escuro; nenhuma alteração na coluna gerada `period
 
 ---
 
-### Etapa 2 — Ícones nas categorias
+### Etapa 2 — Ícones nas categorias ✅ CONCLUÍDA
+
+**Status.** Concluída em `81977c84efd03bc4dcb4592f7893fba12afad167`
+(`feat: adiciona ícones de categoria e seletor com suporte visual`). Incluiu os
+ajustes identificados no teste: seletor de categoria das movimentações
+substituído por combobox acessível com ícones, traços mais encorpados/tamanho
+ligeiramente maior e catálogo ampliado de 24 para 50 ícones. Validações
+completas: `npm run check`, `npm test`, `npm run build`, `cargo fmt --all --
+--check`, `cargo clippy --workspace --all-targets -- -D warnings`,
+`cargo test --workspace` e `npm run bindings` sem diff.
 
 **Objetivo.** Associar ícone curado a cada categoria com fallback genérico, sem
 armazenar imagens no banco.
