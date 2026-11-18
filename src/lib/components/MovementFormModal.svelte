@@ -23,6 +23,7 @@
     MovementFormRequest,
     SimpleMovementKind,
   } from "../movement-form";
+  import CategorySelect from "./CategorySelect.svelte";
   import Modal from "./Modal.svelte";
 
   const allKinds: MovementFormKind[] = [
@@ -486,15 +487,14 @@
           <input type="date" bind:value={firstDueOn} required />
         </label>
 
-        <label class="field">
+        <div class="field">
           <span>Categoria</span>
-          <select bind:value={categoryId} required>
-            <option value="" disabled>Escolha a categoria</option>
-            {#each categoryOptions as category (category.id)}
-              <option value={category.id}>{category.name}</option>
-            {/each}
-          </select>
-        </label>
+          <CategorySelect
+            categories={categoryOptions}
+            bind:value={categoryId}
+            required
+          />
+        </div>
 
         <label class="field">
           <span>Método</span>
@@ -593,15 +593,14 @@
         {/if}
 
         {#if needsCategory}
-          <label class="field">
+          <div class="field">
             <span>Categoria</span>
-            <select bind:value={categoryId} required>
-              <option value="" disabled>Escolha a categoria</option>
-              {#each categoryOptions as category (category.id)}
-                <option value={category.id}>{category.name}</option>
-              {/each}
-            </select>
-          </label>
+            <CategorySelect
+              categories={categoryOptions}
+              bind:value={categoryId}
+              required
+            />
+          </div>
 
           <label class="field">
             <span>Método</span>

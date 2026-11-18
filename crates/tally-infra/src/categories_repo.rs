@@ -7,7 +7,7 @@ use tally_app::error::AppError;
 use crate::db::{Database, map_sqlite_error};
 
 const SELECT_CATEGORY: &str = "
-    SELECT id, name, kind, archived_at, created_at
+    SELECT id, name, kind, icon, archived_at, created_at
     FROM categories
     WHERE 1 = 1
 ";
@@ -46,13 +46,18 @@ impl CategoriesRepository for SqliteCategoriesRepository {
                 transaction
                     .execute(
                         "INSERT INTO categories (
-                            id, name, kind, archived_at, created_at, updated_at
+                            id, name, kind, icon, archived_at, created_at, updated_at
                          ) VALUES (
-                            ?1, ?2, ?3, NULL,
+                            ?1, ?2, ?3, ?4, NULL,
                             strftime('%Y-%m-%dT%H:%M:%fZ', 'now'),
                             strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
                          )",
-                        params![category.id, category.name, category.kind.as_str()],
+                        params![
+                            category.id,
+                            category.name,
+                            category.kind.as_str(),
+                            category.icon
+                        ],
                     )
                     .map_err(map_sqlite_error)?;
 
@@ -61,18 +66,25 @@ impl CategoriesRepository for SqliteCategoriesRepository {
             .await
     }
 
-    async fn rename(&self, id: &str, name: &str) -> Result<CategoryDto, AppError> {
+    async fn update(
+        &self,
+        id: &str,
+        name: &str,
+        icon: Option<&str>,
+    ) -> Result<CategoryDto, AppError> {
         let id = id.to_owned();
         let name = name.to_owned();
+        let icon = icon.map(str::to_owned);
 
         self.db
             .transaction(move |transaction| {
                 let changed = transaction
                     .execute(
                         "UPDATE categories
-                         SET name = ?1, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
-                         WHERE id = ?2",
-                        params![name, id],
+                         SET name = ?1, icon = COALESCE(?2, icon),
+                             updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+                         WHERE id = ?3",
+                        params![name, icon, id],
                     )
                     .map_err(map_sqlite_error)?;
 
@@ -166,7 +178,8 @@ fn map_category_row(row: &Row<'_>) -> rusqlite::Result<CategoryDto> {
         id: row.get(0)?,
         name: row.get(1)?,
         kind: row.get(2)?,
-        archived_at: row.get(3)?,
-        created_at: row.get(4)?,
+        icon: row.get(3)?,
+        archived_at: row.get(4)?,
+        created_at: row.get(5)?,
     })
 }

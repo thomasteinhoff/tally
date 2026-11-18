@@ -2,7 +2,9 @@
   import { untrack } from "svelte";
 
   import type { CategoryDto } from "../api/bindings";
+  import { CATEGORY_ICONS } from "../category-icons";
   import type { CategoryFormRequest } from "../form-types";
+  import CategoryIcon from "./CategoryIcon.svelte";
   import Modal from "./Modal.svelte";
 
   let {
@@ -23,10 +25,12 @@
     editing: category !== null,
     name: category?.name ?? "",
     kind: category?.kind ?? "expense",
+    icon: category?.icon ?? "generic",
   }));
   const editing = initial.editing;
   let name = $state(initial.name);
   let kind = $state(initial.kind);
+  let icon = $state(initial.icon);
   let localError = $state<string | null>(null);
 
   function submit(): void {
@@ -41,12 +45,13 @@
       id: category?.id ?? null,
       name: name.trim(),
       kind,
+      icon,
     });
   }
 </script>
 
 <Modal
-  title={editing ? "Renomear categoria" : "Nova categoria"}
+  title={editing ? "Editar categoria" : "Nova categoria"}
   {onclose}
 >
   <form
@@ -74,6 +79,25 @@
           <option value="income">Receita</option>
         </select>
       </label>
+
+      <div class="field field--wide">
+        <span>Ícone</span>
+        <div class="icon-picker" role="group" aria-label="Ícone da categoria">
+          {#each CATEGORY_ICONS as option (option.key)}
+            <button
+              type="button"
+              class="icon-picker-item"
+              class:is-active={icon === option.key}
+              aria-label={option.label}
+              aria-pressed={icon === option.key}
+              title={option.label}
+              onclick={() => (icon = option.key)}
+            >
+              <CategoryIcon icon={option.key} size={20} />
+            </button>
+          {/each}
+        </div>
+      </div>
     </div>
 
     <p class="form-hint">
@@ -94,7 +118,7 @@
         Cancelar
       </button>
       <button type="submit" class="button button--primary" disabled={saving}>
-        {saving ? "Salvando…" : editing ? "Salvar nome" : "Criar categoria"}
+        {saving ? "Salvando…" : editing ? "Salvar alterações" : "Criar categoria"}
       </button>
     </footer>
   </form>

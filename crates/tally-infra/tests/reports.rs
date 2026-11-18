@@ -55,6 +55,7 @@ async fn category(fixture: &Fixture, name: &str, kind: &str) -> String {
         .create(CreateCategoryInput {
             name: name.to_owned(),
             kind: kind.to_owned(),
+            icon: String::new(),
         })
         .await
         .expect("category should be created")

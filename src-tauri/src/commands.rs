@@ -178,8 +178,11 @@ pub async fn update_category(
     state: State<'_, AppState>,
     id: String,
     name: String,
+    icon: Option<String>,
 ) -> Result<CategoryDto, AppError> {
-    categories_service(state.inner())?.rename(&id, &name).await
+    categories_service(state.inner())?
+        .update(&id, &name, icon.as_deref())
+        .await
 }
 
 #[tauri::command]

@@ -76,6 +76,7 @@ async fn seed_expense(fixture: &Fixture) {
         .create(CreateCategoryInput {
             name: "Mercado".to_owned(),
             kind: "expense".to_owned(),
+            icon: String::new(),
         })
         .await
         .expect("category")
@@ -177,6 +178,7 @@ async fn restore_replaces_the_live_database_and_keeps_integrity() {
         .create(CreateCategoryInput {
             name: "Depois do backup".to_owned(),
             kind: "expense".to_owned(),
+            icon: String::new(),
         })
         .await
         .expect("category");
@@ -229,6 +231,7 @@ async fn restore_creates_a_pre_restore_snapshot_and_pruning_preserves_it() {
         .create(CreateCategoryInput {
             name: "Depois do backup".to_owned(),
             kind: "expense".to_owned(),
+            icon: String::new(),
         })
         .await
         .expect("category");
@@ -340,7 +343,7 @@ async fn restores_a_legacy_backup_and_applies_pending_migrations() {
         .call(|connection| connection.query_row("PRAGMA user_version", [], |row| row.get(0)))
         .await
         .expect("version");
-    assert_eq!(version, 2);
+    assert_eq!(version, 3);
 
     let has_column: i64 = fixture
         .db
@@ -355,6 +358,20 @@ async fn restores_a_legacy_backup_and_applies_pending_migrations() {
         .await
         .expect("column");
     assert_eq!(has_column, 1);
+
+    let has_icon: i64 = fixture
+        .db
+        .call(|connection| {
+            connection.query_row(
+                "SELECT COUNT(*) FROM pragma_table_info('categories')
+                 WHERE name = 'icon'",
+                [],
+                |row| row.get(0),
+            )
+        })
+        .await
+        .expect("icon column");
+    assert_eq!(has_icon, 1);
 }
 
 #[tokio::test]

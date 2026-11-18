@@ -12,4 +12,5 @@ export type CategoryFormRequest = {
   id: string | null;
   name: string;
   kind: string;
+  icon: string;
 };

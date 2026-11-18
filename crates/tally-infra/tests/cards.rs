@@ -67,6 +67,7 @@ async fn category(fixture: &Fixture, name: &str) -> String {
         .create(CreateCategoryInput {
             name: name.to_owned(),
             kind: "expense".to_owned(),
+            icon: String::new(),
         })
         .await
         .expect("category should be created")
@@ -663,6 +664,7 @@ async fn purchase_requires_a_card_and_an_expense_category() {
         .create(CreateCategoryInput {
             name: "Salario".to_owned(),
             kind: "income".to_owned(),
+            icon: String::new(),
         })
         .await
         .expect("category")

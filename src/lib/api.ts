@@ -86,8 +86,12 @@ export function createCategory(
   return invoke<CategoryDto>("create_category", { input });
 }
 
-export function updateCategory(id: string, name: string): Promise<CategoryDto> {
-  return invoke<CategoryDto>("update_category", { id, name });
+export function updateCategory(
+  id: string,
+  name: string,
+  icon: string,
+): Promise<CategoryDto> {
+  return invoke<CategoryDto>("update_category", { id, name, icon });
 }
 
 export function setCategoryArchived(

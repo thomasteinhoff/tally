@@ -61,6 +61,7 @@ pub struct CategoryDto {
     pub id: String,
     pub name: String,
     pub kind: String,
+    pub icon: String,
     pub archived_at: Option<String>,
     pub created_at: String,
 }
@@ -70,6 +71,8 @@ pub struct CategoryDto {
 pub struct CreateCategoryInput {
     pub name: String,
     pub kind: String,
+    #[serde(default)]
+    pub icon: String,
 }
 
 /// Movimentação simples exibida na lista. `amount_cents` é o impacto assinado

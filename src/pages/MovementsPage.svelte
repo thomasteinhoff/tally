@@ -16,6 +16,7 @@
     listCategories,
     listMovements,
   } from "../lib/api";
+  import CategoryIcon from "../lib/components/CategoryIcon.svelte";
   import MovementFormModal from "../lib/components/MovementFormModal.svelte";
   import { confirmAction } from "../lib/confirm";
   import { normalizeError } from "../lib/errors";
@@ -106,6 +107,9 @@
 
   const accounts = $derived(accountsQuery.data ?? []);
   const categories = $derived(categoriesQuery.data ?? []);
+  const categoryIcons = $derived(
+    new Map(categories.map((category) => [category.id, category.icon])),
+  );
   const cards = $derived(
     (cardsQuery.data ?? []).filter((card) => !card.archived_at),
   );
@@ -416,7 +420,18 @@
                   {/if}
                 </div>
               </td>
-              <td>{movement.category_name ?? "—"}</td>
+              <td>
+                {#if movement.category_id && categoryIcons.has(movement.category_id)}
+                  <span class="category-cell">
+                    <CategoryIcon
+                      icon={categoryIcons.get(movement.category_id)}
+                    />
+                    {movement.category_name ?? "—"}
+                  </span>
+                {:else}
+                  {movement.category_name ?? "—"}
+                {/if}
+              </td>
               <td>{paymentLabel(movement.payment_method)}</td>
               <td>{periodLabel(movement.period)}</td>
               <td

@@ -57,6 +57,7 @@ async fn category(fixture: &Fixture, name: &str, kind: &str) -> String {
         .create(CreateCategoryInput {
             name: name.to_owned(),
             kind: kind.to_owned(),
+            icon: String::new(),
         })
         .await
         .expect("category should be created")
@@ -1020,6 +1021,7 @@ async fn category_duplicates_are_conflicts_and_kind_is_immutable() {
             .create(CreateCategoryInput {
                 name: "mercado".to_owned(),
                 kind: "expense".to_owned(),
+                icon: String::new(),
             })
             .await,
         Err(AppError::Conflict { .. })
@@ -1027,11 +1029,12 @@ async fn category_duplicates_are_conflicts_and_kind_is_immutable() {
 
     let renamed = fixture
         .categories
-        .rename(&market, "  Supermercado  ")
+        .update(&market, "  Supermercado  ", None)
         .await
         .expect("rename");
     assert_eq!(renamed.name, "Supermercado");
     assert_eq!(renamed.kind, "expense");
+    assert_eq!(renamed.icon, "generic");
 
     fixture
         .categories
@@ -1046,4 +1049,74 @@ async fn category_duplicates_are_conflicts_and_kind_is_immutable() {
             .expect("list")
             .is_empty()
     );
+}
+
+#[tokio::test]
+async fn category_icon_accepts_short_keys_and_falls_back_to_generic() {
+    let fixture = fixture().await;
+
+    let coffee = fixture
+        .categories
+        .create(CreateCategoryInput {
+            name: "Café".to_owned(),
+            kind: "expense".to_owned(),
+            icon: "  COFFEE  ".to_owned(),
+        })
+        .await
+        .expect("valid icon");
+    assert_eq!(coffee.icon, "coffee");
+
+    let fallback = fixture
+        .categories
+        .create(CreateCategoryInput {
+            name: "Sem ícone".to_owned(),
+            kind: "expense".to_owned(),
+            icon: String::new(),
+        })
+        .await
+        .expect("empty icon");
+    assert_eq!(fallback.icon, "generic");
+
+    for icon in [
+        "com espaço".to_owned(),
+        "svg<path>".to_owned(),
+        "x".repeat(33),
+    ] {
+        assert!(matches!(
+            fixture
+                .categories
+                .create(CreateCategoryInput {
+                    name: format!("inválida {icon}"),
+                    kind: "expense".to_owned(),
+                    icon: icon.clone(),
+                })
+                .await,
+            Err(AppError::Validation { .. })
+        ));
+    }
+
+    let updated = fixture
+        .categories
+        .update(&coffee.id, "Café da manhã", Some("mug"))
+        .await
+        .expect("update icon");
+    assert_eq!(updated.icon, "mug");
+
+    assert!(matches!(
+        fixture
+            .categories
+            .update(&coffee.id, "Café da manhã", Some("ícone inválido"))
+            .await,
+        Err(AppError::Validation { .. })
+    ));
+
+    let stored = fixture
+        .categories
+        .list(true)
+        .await
+        .expect("list")
+        .into_iter()
+        .find(|category| category.id == coffee.id)
+        .expect("category should exist");
+    assert_eq!(stored.icon, "mug");
 }

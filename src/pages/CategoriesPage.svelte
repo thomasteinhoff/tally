@@ -14,6 +14,7 @@
     updateCategory,
   } from "../lib/api";
   import CategoryFormModal from "../lib/components/CategoryFormModal.svelte";
+  import CategoryIcon from "../lib/components/CategoryIcon.svelte";
   import { confirmAction } from "../lib/confirm";
   import { normalizeError } from "../lib/errors";
   import { kindLabel } from "../lib/format";
@@ -101,12 +102,13 @@
       if (!request.id) {
         throw new Error("Categoria sem identificador.");
       }
-      return updateCategory(request.id, request.name);
+      return updateCategory(request.id, request.name, request.icon);
     }
 
     return createCategory({
       name: request.name,
       kind: request.kind,
+      icon: request.icon,
     });
   }
 
@@ -245,7 +247,12 @@
         <tbody>
           {#each visibleCategories as category (category.id)}
             <tr class:row-muted={Boolean(category.archived_at)}>
-              <td>{category.name}</td>
+              <td>
+                <span class="category-cell">
+                  <CategoryIcon icon={category.icon} />
+                  {category.name}
+                </span>
+              </td>
               <td>
                 <span class="tag tag--{category.kind}"
                   >{kindLabel(category.kind)}</span
@@ -265,7 +272,7 @@
                     class="button button--small"
                     onclick={() => openEdit(category)}
                   >
-                    Renomear
+                    Editar
                   </button>
                   <button
                     type="button"
