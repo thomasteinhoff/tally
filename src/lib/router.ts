@@ -1,5 +1,6 @@
 export type Route =
   | { name: "overview" }
+  | { name: "analysis" }
   | { name: "movements" }
   | { name: "accounts" }
   | { name: "statement"; accountId: string }
@@ -22,6 +23,8 @@ export function parseRoute(hash: string): Route {
 
   if (segments.length === 1) {
     switch (segments[0]) {
+      case "quadro":
+        return { name: "analysis" };
       case "movimentacoes":
         return { name: "movements" };
       case "contas":
@@ -33,8 +36,8 @@ export function parseRoute(hash: string): Route {
       case "categorias":
         return { name: "categories" };
       case "relatorios":
-        // Unificada com a Visão geral; mantém links antigos funcionando.
-        return { name: "overview" };
+        // Caminho legado do Quadro de Análises; mantém links antigos.
+        return { name: "analysis" };
       case "configuracoes":
       case "sobre":
         // Sobre foi unificado em Configurações.
@@ -63,6 +66,8 @@ export function routeHref(route: Route): string {
   switch (route.name) {
     case "overview":
       return "#/";
+    case "analysis":
+      return "#/quadro";
     case "movements":
       return "#/movimentacoes";
     case "accounts":
@@ -85,3 +90,62 @@ export function routeHref(route: Route): string {
       return `#${route.path}`;
   }
 }
+
+/**
+ * Navegação principal. A ordem é intencional: Operação (fluxo diário) antes
+ * de Sistema (cadastros).
+ */
+export type NavSection =
+  | "overview"
+  | "analysis"
+  | "movements"
+  | "accounts"
+  | "installments"
+  | "categories"
+  | "settings";
+
+export type NavItem = {
+  section: NavSection;
+  label: string;
+  href: string;
+};
+
+export const NAV_GROUPS: ReadonlyArray<{
+  label: string;
+  items: ReadonlyArray<NavItem>;
+}> = [
+  {
+    label: "Operação",
+    items: [
+      { section: "overview", label: "Visão geral", href: "#/" },
+      { section: "analysis", label: "Quadro de análises", href: "#/quadro" },
+      { section: "movements", label: "Movimentações", href: "#/movimentacoes" },
+      { section: "accounts", label: "Contas e cartões", href: "#/contas" },
+      { section: "installments", label: "Parcelamentos", href: "#/parcelamentos" },
+    ],
+  },
+  {
+    label: "Sistema",
+    items: [
+      { section: "categories", label: "Categorias", href: "#/categorias" },
+      { section: "settings", label: "Configurações", href: "#/configuracoes" },
+    ],
+  },
+];
+
+/** Rotas filhas mantêm o item pai ativo. */
+export function isSectionActive(route: Route, section: NavSection): boolean {
+  if (section === "accounts") {
+    return (
+      route.name === "accounts" ||
+      route.name === "statement" ||
+      route.name === "cards" ||
+      route.name === "card"
+    );
+  }
+  if (section === "installments") {
+    return route.name === "installments" || route.name === "installment";
+  }
+  return route.name === section;
+}
+

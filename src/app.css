@@ -151,6 +151,16 @@
   --brand-stone: #d2c9b7;
   --brand-terracotta: #c16b4b;
 
+  /* Paleta dos gráficos (rosquinha) */
+  --chart-1: #c16b4b;
+  --chart-2: #6f7d52;
+  --chart-3: #a98b4b;
+  --chart-4: #8c5a44;
+  --chart-5: #5f7d7a;
+  --chart-6: #9a6b7f;
+  --chart-7: #7a7461;
+  --chart-8: #4f6a8a;
+
   /* Semântica financeira */
   --positive: #47643f;
   --positive-soft: #e4ebdb;
@@ -251,6 +261,15 @@
     --brand-stone: #d2c9b7;
     --brand-terracotta: #c16b4b;
 
+    --chart-1: #e09a7c;
+    --chart-2: #a9c296;
+    --chart-3: #d9b36b;
+    --chart-4: #c98e78;
+    --chart-5: #8fb5b0;
+    --chart-6: #c49aab;
+    --chart-7: #b8b09a;
+    --chart-8: #93aecd;
+
     --positive: #a9c296;
     --positive-soft: #2d342a;
     --negative: #e3a084;
@@ -305,6 +324,15 @@
   --accent-soft: #3f2f27;
   --brand-stone: #d2c9b7;
   --brand-terracotta: #c16b4b;
+
+  --chart-1: #e09a7c;
+  --chart-2: #a9c296;
+  --chart-3: #d9b36b;
+  --chart-4: #c98e78;
+  --chart-5: #8fb5b0;
+  --chart-6: #c49aab;
+  --chart-7: #b8b09a;
+  --chart-8: #93aecd;
 
   --positive: #a9c296;
   --positive-soft: #2d342a;
@@ -1641,25 +1669,29 @@ button {
   min-width: 0;
 }
 
-.analyses > .overview-grid {
+/* Quadro de análises ----------------------------------------------------- */
+
+.analysis-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-4);
+  align-items: start;
+}
+
+.analysis-grid + .panel {
   margin-top: var(--space-4);
 }
 
-/* Escopo do filtro de análise ------------------------------------------ */
-
-.filter-scope {
-  display: flex;
-  align-items: baseline;
-  gap: var(--space-2);
-  margin: 14px 18px 0;
-  color: var(--ink-2);
-  font-size: var(--text-meta);
-  line-height: 1.55;
+.analysis-grid .panel + .panel {
+  margin-top: 0;
 }
 
-.filter-scope .mono {
-  color: var(--ink-3);
-  white-space: nowrap;
+.month-toolbar {
+  align-items: flex-end;
+}
+
+.month-field {
+  width: 150px;
 }
 
 /* Gráfico de categorias -------------------------------------------------- */
@@ -1709,8 +1741,21 @@ button {
 }
 
 .bar-label {
-  overflow: hidden;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
   color: var(--ink);
+  font-size: var(--text-meta);
+}
+
+.bar-label svg {
+  flex: none;
+  color: var(--ink-3);
+}
+
+.bar-label-text {
+  overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -1747,6 +1792,155 @@ button {
 
 .bar-fill--income {
   background: var(--positive);
+}
+
+/* Alternância barras/rosquinha e legenda -------------------------------- */
+
+.chart-toggle {
+  display: inline-flex;
+  overflow: hidden;
+  border: 1px solid var(--control-border);
+  border-radius: var(--radius-xs);
+}
+
+.chart-toggle button {
+  padding: 4px 9px;
+  border: 0;
+  background: var(--surface);
+  color: var(--ink-2);
+  font: inherit;
+  font-size: var(--text-label);
+  cursor: pointer;
+  transition:
+    background-color var(--motion-fast) var(--ease-out),
+    color var(--motion-fast) var(--ease-out);
+}
+
+.chart-toggle button + button {
+  border-left: 1px solid var(--rule);
+}
+
+.chart-toggle button:hover {
+  background: var(--surface-hover);
+  color: var(--ink);
+}
+
+.chart-toggle button.is-active {
+  background: var(--solid);
+  color: var(--solid-ink);
+}
+
+.chart-toggle button:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: -2px;
+}
+
+.donut-layout {
+  display: grid;
+  grid-template-columns: minmax(120px, 160px) minmax(0, 1fr);
+  gap: var(--space-4);
+  align-items: center;
+}
+
+.donut {
+  width: 100%;
+  height: auto;
+}
+
+.donut-track {
+  fill: none;
+  stroke: var(--surface-2);
+  stroke-width: 7;
+}
+
+.donut-slice {
+  fill: none;
+  stroke-width: 7;
+}
+
+.donut-slice--0 { stroke: var(--chart-1); }
+.donut-slice--1 { stroke: var(--chart-2); }
+.donut-slice--2 { stroke: var(--chart-3); }
+.donut-slice--3 { stroke: var(--chart-4); }
+.donut-slice--4 { stroke: var(--chart-5); }
+.donut-slice--5 { stroke: var(--chart-6); }
+.donut-slice--6 { stroke: var(--chart-7); }
+.donut-slice--7 { stroke: var(--chart-8); }
+.donut-slice--other { stroke: var(--ink-3); }
+
+.donut-legend {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.donut-legend li {
+  display: grid;
+  grid-template-columns: 10px 18px minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  font-size: var(--text-meta);
+}
+
+.donut-legend svg {
+  flex: none;
+  color: var(--ink-3);
+}
+
+.legend-swatch {
+  width: 10px;
+  height: 10px;
+  border-radius: 1px;
+  background: var(--chart-1);
+}
+
+.legend-swatch--0 { background: var(--chart-1); }
+.legend-swatch--1 { background: var(--chart-2); }
+.legend-swatch--2 { background: var(--chart-3); }
+.legend-swatch--3 { background: var(--chart-4); }
+.legend-swatch--4 { background: var(--chart-5); }
+.legend-swatch--5 { background: var(--chart-6); }
+.legend-swatch--6 { background: var(--chart-7); }
+.legend-swatch--7 { background: var(--chart-8); }
+.legend-swatch--other { background: var(--ink-3); }
+
+.legend-label {
+  overflow: hidden;
+  color: var(--ink);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.legend-value {
+  color: var(--ink-2);
+  white-space: nowrap;
+}
+
+.legend-percent {
+  min-width: 3.6em;
+  color: var(--ink-3);
+  text-align: right;
+}
+
+.expense-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.expense-label svg {
+  flex: none;
+  color: var(--ink-3);
+}
+
+.expense-label span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .chart-details {
@@ -2194,7 +2388,8 @@ button {
 /* Responsivo ------------------------------------------------------------ */
 
 @media (max-width: 1180px) {
-  .overview-grid {
+  .overview-grid,
+  .analysis-grid {
     grid-template-columns: 1fr;
   }
 }

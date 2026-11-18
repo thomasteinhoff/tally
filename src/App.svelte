@@ -3,7 +3,12 @@
 
   import { getBootstrap } from "./lib/api";
   import { normalizeError } from "./lib/errors";
-  import { parseRoute, type Route } from "./lib/router";
+  import {
+    isSectionActive,
+    NAV_GROUPS,
+    parseRoute,
+    type Route,
+  } from "./lib/router";
   import {
     setThemePreference,
     themeState,
@@ -13,6 +18,7 @@
   import { requestNewMovement } from "./lib/ui.svelte";
   import BrandMark from "./lib/components/BrandMark.svelte";
   import AccountsPage from "./pages/AccountsPage.svelte";
+  import AnalysisPage from "./pages/AnalysisPage.svelte";
   import CardDetailPage from "./pages/CardDetailPage.svelte";
   import CardsPage from "./pages/CardsPage.svelte";
   import CategoriesPage from "./pages/CategoriesPage.svelte";
@@ -55,41 +61,28 @@
   const pageTitle = $derived(
     route.name === "overview"
       ? "Visão geral"
-      : route.name === "movements"
-        ? "Movimentações"
-        : route.name === "accounts"
-          ? "Contas"
-          : route.name === "statement"
-            ? "Extrato"
-            : route.name === "cards"
-              ? "Cartões"
-              : route.name === "card"
-                ? "Cartão"
-                : route.name === "installments"
-                  ? "Parcelamentos"
-                  : route.name === "installment"
-                    ? "Parcelamento"
-                    : route.name === "categories"
-                      ? "Categorias"
-                      : route.name === "settings"
-                        ? "Configurações"
-                        : "Rota indisponível",
+      : route.name === "analysis"
+        ? "Quadro de análises"
+        : route.name === "movements"
+          ? "Movimentações"
+          : route.name === "accounts"
+            ? "Contas"
+            : route.name === "statement"
+              ? "Extrato"
+              : route.name === "cards"
+                ? "Cartões"
+                : route.name === "card"
+                  ? "Cartão"
+                  : route.name === "installments"
+                    ? "Parcelamentos"
+                    : route.name === "installment"
+                      ? "Parcelamento"
+                      : route.name === "categories"
+                        ? "Categorias"
+                        : route.name === "settings"
+                          ? "Configurações"
+                          : "Rota indisponível",
   );
-
-  function active(section: string): boolean {
-    if (section === "accounts") {
-      return (
-        route.name === "accounts" ||
-        route.name === "statement" ||
-        route.name === "cards" ||
-        route.name === "card"
-      );
-    }
-    if (section === "installments") {
-      return route.name === "installments" || route.name === "installment";
-    }
-    return route.name === section;
-  }
 
   function openNewMovement(): void {
     if (route.name !== "movements") {
@@ -128,61 +121,23 @@
     </a>
 
     <nav class="nav" aria-label="Navegação principal">
-      <div class="nav-group">
-        <span class="nav-section">Operação</span>
-        <a
-          class="nav-item"
-          class:is-active={active("overview")}
-          aria-current={active("overview") ? "page" : undefined}
-          href="#/"
-        >
-          Visão geral
-        </a>
-        <a
-          class="nav-item"
-          class:is-active={active("movements")}
-          aria-current={active("movements") ? "page" : undefined}
-          href="#/movimentacoes"
-        >
-          Movimentações
-        </a>
-        <a
-          class="nav-item"
-          class:is-active={active("accounts")}
-          aria-current={active("accounts") ? "page" : undefined}
-          href="#/contas"
-        >
-          Contas e cartões
-        </a>
-        <a
-          class="nav-item"
-          class:is-active={active("installments")}
-          aria-current={active("installments") ? "page" : undefined}
-          href="#/parcelamentos"
-        >
-          Parcelamentos
-        </a>
-      </div>
-
-      <div class="nav-group">
-        <span class="nav-section">Sistema</span>
-        <a
-          class="nav-item"
-          class:is-active={active("categories")}
-          aria-current={active("categories") ? "page" : undefined}
-          href="#/categorias"
-        >
-          Categorias
-        </a>
-        <a
-          class="nav-item"
-          class:is-active={active("settings")}
-          aria-current={active("settings") ? "page" : undefined}
-          href="#/configuracoes"
-        >
-          Configurações
-        </a>
-      </div>
+      {#each NAV_GROUPS as group (group.label)}
+        <div class="nav-group">
+          <span class="nav-section">{group.label}</span>
+          {#each group.items as item (item.section)}
+            <a
+              class="nav-item"
+              class:is-active={isSectionActive(route, item.section)}
+              aria-current={isSectionActive(route, item.section)
+                ? "page"
+                : undefined}
+              href={item.href}
+            >
+              {item.label}
+            </a>
+          {/each}
+        </div>
+      {/each}
     </nav>
 
     <div class="sidebar-footer">
@@ -274,6 +229,8 @@
     <div class="content">
       {#if route.name === "overview"}
         <OverviewPage />
+      {:else if route.name === "analysis"}
+        <AnalysisPage />
       {:else if route.name === "movements"}
         <MovementsPage />
       {:else if route.name === "accounts"}
