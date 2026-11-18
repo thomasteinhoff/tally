@@ -333,7 +333,18 @@ diff; ~24 paths SVG escritos à mão, sem dependência nova.
 
 ---
 
-### Etapa 3 — Navegação, Visão Geral enxuta e Quadro de Análises base
+### Etapa 3 — Navegação, Visão Geral enxuta e Quadro de Análises base ✅ CONCLUÍDA
+
+**Status.** Concluída em `186074e046cca95f763260e70cd45ed5f937cf41`
+(`feat: separa visao geral e quadro de analises`). Incluiu os sete itens de
+navegação na ordem definida, `#/quadro` com `#/relatorios` legado, Visão Geral
+enxuta (sem filtros, gráficos ou detalhamento de compromissos, com cinco
+lançamentos recentes) e o Quadro com seletor de mês e os quatro widgets
+iniciais. `CategoryBars.svelte` foi substituído por `CategoryChart.svelte`
+(barras/rosquinha com ícones). Validações completas: `npm run check`,
+`npm test` (46 testes), `npm run build`, `cargo fmt --all -- --check`,
+`cargo clippy --workspace --all-targets -- -D warnings`,
+`cargo test --workspace` e `npm run bindings` sem diff.
 
 **Objetivo.** Aplicar a nova ordem de navegação, transformar a Visão Geral em
 resumo rápido e migrar as análises já existentes para o Quadro de Análises com
