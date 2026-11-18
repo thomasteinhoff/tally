@@ -193,7 +193,8 @@ impl MovementsRepository for SqliteMovementsRepository {
              AND (?5 IS NULL OR e.payment_method = ?5)
              AND (?6 IS NULL OR e.occurred_on >= ?6)
              AND (?7 IS NULL OR e.occurred_on <= ?7)
-             ORDER BY e.occurred_on DESC, e.created_at DESC, e.id DESC"
+             ORDER BY e.occurred_on DESC, COALESCE(e.occurred_time, '') DESC,
+                      e.created_at DESC, e.id DESC"
         );
         let account_id = filter.account_id;
         let category_id = filter.category_id;

@@ -1,3 +1,4 @@
+use rusqlite::params;
 use tally_app::{
     AccountsService, AppError, CategoriesService, CreateAccountInput, CreateAdjustmentInput,
     CreateCategoryInput, CreateExpenseInput, CreateIncomeInput, CreateTransferInput,
@@ -801,6 +802,81 @@ async fn list_applies_account_category_kind_period_and_date_filters() {
             .await,
         Err(AppError::Validation { .. })
     ));
+}
+
+#[tokio::test]
+async fn list_orders_by_date_time_and_falls_back_to_creation() {
+    let fixture = fixture().await;
+    let bank = account(&fixture, "Banco", 100_000).await;
+    let market = category(&fixture, "Mercado", "expense").await;
+
+    for (time, manual, description) in [
+        (Some("09:00"), None, "manhã com horário"),
+        (None, Some("tarde"), "sem horário"),
+        (Some("20:00"), None, "noite com horário"),
+        (Some("12:00"), None, "meio-dia antigo"),
+        (Some("12:00"), None, "meio-dia recente"),
+    ] {
+        fixture
+            .movements
+            .create_expense(expense_input(
+                &bank,
+                &market,
+                1_000,
+                "2027-01-10",
+                time,
+                manual,
+                description,
+            ))
+            .await
+            .expect("expense");
+    }
+    fixture
+        .movements
+        .create_expense(expense_input(
+            &bank,
+            &market,
+            1_000,
+            "2027-01-09",
+            Some("23:00"),
+            None,
+            "retroativo",
+        ))
+        .await
+        .expect("retroactive expense");
+
+    for (created_at, description) in [
+        ("2027-01-01T10:00:00.000Z", "meio-dia antigo"),
+        ("2027-01-01T11:00:00.000Z", "meio-dia recente"),
+    ] {
+        fixture
+            .db
+            .call(move |connection| {
+                connection.execute(
+                    "UPDATE journal_entries SET created_at = ?1 WHERE description = ?2",
+                    params![created_at, description],
+                )
+            })
+            .await
+            .expect("created_at update");
+    }
+
+    let listed = fixture.movements.list(None).await.expect("list");
+    let descriptions: Vec<&str> = listed
+        .iter()
+        .map(|movement| movement.description.as_deref().unwrap_or(""))
+        .collect();
+    assert_eq!(
+        descriptions,
+        vec![
+            "noite com horário",
+            "meio-dia recente",
+            "meio-dia antigo",
+            "manhã com horário",
+            "sem horário",
+            "retroativo",
+        ]
+    );
 }
 
 #[tokio::test]

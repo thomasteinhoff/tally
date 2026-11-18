@@ -116,7 +116,7 @@
   const cards = $derived(cardsQuery.data ?? []);
   const activeCards = $derived(cards.filter((card) => !card.archived_at));
   const firstRun = $derived(accountsQuery.isSuccess && accounts.length === 0);
-  const recentMovements = $derived(movements.slice(0, 10));
+  const recentMovements = $derived(movements.slice(0, 5));
   const portfolioLoading = $derived(
     accountsQuery.isPending || cardsQuery.isPending,
   );

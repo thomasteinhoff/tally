@@ -205,6 +205,17 @@ export function periodLabel(period: string | null): string {
   return period ? (periodLabels[period] ?? period) : "—";
 }
 
+const periodRanges: Record<string, string> = {
+  madrugada: "Madrugada (00:00–04:59)",
+  manha: "Manhã (05:00–11:59)",
+  tarde: "Tarde (12:00–18:59)",
+  noite: "Noite (19:00–23:59)",
+};
+
+export function periodRangeLabel(period: string | null): string {
+  return period ? (periodRanges[period] ?? periodLabel(period)) : "—";
+}
+
 export function kindLabel(kind: string): string {
   return kindLabels[kind] ?? kind;
 }

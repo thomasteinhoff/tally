@@ -1135,7 +1135,7 @@ button {
 }
 
 .text-link {
-  color: var(--accent-ink);
+  color: var(--ink);
   font-size: var(--text-table);
   text-decoration: none;
   border-bottom: 1px solid transparent;

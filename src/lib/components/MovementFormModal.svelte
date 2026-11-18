@@ -14,6 +14,7 @@
     movementAmountForInput,
     normalizeTimeInput,
     parseAmountToCents,
+    periodRangeLabel,
     todayIso,
   } from "../format";
   import type {
@@ -621,24 +622,33 @@
             inputmode="numeric"
             maxlength="5"
             placeholder="HH:MM"
-            bind:value={occurredTime}
+            value={occurredTime}
+            oninput={(event) => {
+              occurredTime = event.currentTarget.value;
+              if (event.currentTarget.value.trim()) manualPeriod = "";
+            }}
             onblur={blurTime}
           />
         </label>
 
-        {#if !occurredTime}
-          <label class="field">
-            <span>Período manual</span>
-            <select bind:value={manualPeriod} required>
-              <option value="" disabled>Escolha o período</option>
-              <option value="madrugada">Madrugada</option>
-              <option value="manha">Manhã</option>
-              <option value="tarde">Tarde</option>
-              <option value="noite">Noite</option>
-              <option value="custom">Personalizado</option>
-            </select>
-          </label>
-        {/if}
+        <label class="field">
+          <span>ou Período manual</span>
+          <select
+            value={manualPeriod}
+            required={!occurredTime}
+            onchange={(event) => {
+              manualPeriod = event.currentTarget.value;
+              if (manualPeriod) occurredTime = "";
+            }}
+          >
+            <option value="" disabled>Escolha o período</option>
+            <option value="madrugada">{periodRangeLabel("madrugada")}</option>
+            <option value="manha">{periodRangeLabel("manha")}</option>
+            <option value="tarde">{periodRangeLabel("tarde")}</option>
+            <option value="noite">{periodRangeLabel("noite")}</option>
+            <option value="custom">{periodRangeLabel("custom")}</option>
+          </select>
+        </label>
       {/if}
 
       <label class="field field--wide">
@@ -650,6 +660,14 @@
         />
       </label>
     </div>
+
+    {#if !isAdjustment}
+      <p class="form-hint">
+        Horário e período manual são alternativas: preencher um limpa o outro.
+        Faixas: Madrugada (00:00–04:59), Manhã (05:00–11:59), Tarde
+        (12:00–18:59), Noite (19:00–23:59).
+      </p>
+    {/if}
 
     {#if isAdjustment}
       {#if selectedAccount && currentBalanceCents !== null}
@@ -688,11 +706,6 @@
         {#if selectedCard && selectedCard.debt_cents > 0}
           Dívida atual: {formatCents(selectedCard.debt_cents)}.
         {/if}
-      </p>
-    {:else if !occurredTime}
-      <p class="form-hint">
-        Sem horário, o período manual é obrigatório. O período é derivado pelo
-        banco quando há horário.
       </p>
     {/if}
 

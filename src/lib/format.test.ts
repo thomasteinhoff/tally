@@ -10,6 +10,7 @@ import {
   normalizeTimeInput,
   parseAmountToCents,
   periodLabel,
+  periodRangeLabel,
 } from "./format";
 
 describe("formatCents", () => {
@@ -81,6 +82,15 @@ describe("formatação de apoio", () => {
     expect(formatMonth("2026-10-31")).toBe("2026-10-31");
     expect(periodLabel("madrugada")).toBe("Madrugada");
     expect(periodLabel(null)).toBe("—");
+  });
+
+  it("descreve as quatro faixas com seus intervalos", () => {
+    expect(periodRangeLabel("madrugada")).toBe("Madrugada (00:00–04:59)");
+    expect(periodRangeLabel("manha")).toBe("Manhã (05:00–11:59)");
+    expect(periodRangeLabel("tarde")).toBe("Tarde (12:00–18:59)");
+    expect(periodRangeLabel("noite")).toBe("Noite (19:00–23:59)");
+    expect(periodRangeLabel("custom")).toBe("Personalizado");
+    expect(periodRangeLabel(null)).toBe("—");
   });
 
   it("combina disponível e limite do cartão", () => {
