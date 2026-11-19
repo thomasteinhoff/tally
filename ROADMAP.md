@@ -26,8 +26,11 @@
   `ca80d70e03e43758420d5c67568e8ab375ff4500`
   (`feat: ordena movimentações cronologicamente e ajusta formulário`).
 - **Etapa 2 concluída** em `81977c84efd03bc4dcb4592f7893fba12afad167`
-  (`feat: adiciona ícones de categoria e seletor com suporte visual`);
-  Etapas 3–5 pendentes.
+  (`feat: adiciona ícones de categoria e seletor com suporte visual`).
+- **Etapa 3 concluída** em `186074e046cca95f763260e70cd45ed5f937cf41`
+  (`feat: separa visao geral e quadro de analises`).
+- **Etapa 4 concluída** em `435c980a56ebdbd0cf514d313b6491e210a46256`
+  (`feat: conclui o quadro de analises da v0.2.0`); Etapa 5 pendente.
 - Repositório público com descrição e topics atualizados; sem homepage e sem
   arquivo `LICENSE` (o `Cargo.toml` declara MIT).
 - `package.json` ainda declara versão `0.1.0`; a atualização de versão faz parte
@@ -396,7 +399,16 @@ gráfico sem duplicação.
 
 ---
 
-### Etapa 4 — Novas análises e acabamento do Quadro
+### Etapa 4 — Novas análises e acabamento do Quadro ✅ CONCLUÍDA
+
+**Status.** Concluída em `435c980a56ebdbd0cf514d313b6491e210a46256`
+(`feat: conclui o quadro de analises da v0.2.0`). Incluiu Gastos por período do
+dia (acumulado/média diária), Evolução dos gastos mensais e Patrimônio histórico;
+polimento visual do Quadro e da Visão Geral; e Motion Design discreto com
+respeito a `prefers-reduced-motion`. Validações completas: `npm run check`,
+`npm test` (46 testes), `npm run build`, `cargo fmt --all -- --check`,
+`cargo clippy --workspace --all-targets -- -D warnings`,
+`cargo test --workspace` e `npm run bindings` sem diff.
 
 **Objetivo.** Entregar Gastos por período do dia, Evolução dos gastos mensais e
 Patrimônio histórico; fechar apresentação e percentuais conforme D1.
