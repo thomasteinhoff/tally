@@ -1661,7 +1661,8 @@ button {
   margin-top: var(--space-4);
 }
 
-.overview-grid + .panel {
+.overview-grid + .panel,
+.panel + .ledger-hero {
   margin-top: var(--space-4);
 }
 
@@ -1678,7 +1679,9 @@ button {
   align-items: start;
 }
 
-.analysis-grid + .panel {
+.analysis-grid + .panel,
+.panel + .analysis-grid,
+.analysis-grid + .analysis-grid {
   margin-top: var(--space-4);
 }
 
@@ -1813,7 +1816,12 @@ button {
   cursor: pointer;
   transition:
     background-color var(--motion-fast) var(--ease-out),
-    color var(--motion-fast) var(--ease-out);
+    color var(--motion-fast) var(--ease-out),
+    transform var(--motion-fast) var(--ease-out);
+}
+
+.chart-toggle button:active {
+  transform: translateY(1px);
 }
 
 .chart-toggle button + button {
@@ -1941,6 +1949,151 @@ button {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/* Período do dia, evolução mensal e patrimônio histórico ----------------- */
+
+.period-card,
+.trend,
+.history {
+  display: grid;
+  gap: 14px;
+  padding: 14px 18px 16px;
+}
+
+.period-explainer {
+  margin: 0;
+  color: var(--ink-3);
+  font-size: var(--text-meta);
+  line-height: 1.5;
+}
+
+.period-list,
+.trend-list,
+.history-labels {
+  display: grid;
+  gap: 11px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.period-list li,
+.trend-list li {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+}
+
+.period-note {
+  color: var(--ink-3);
+  font-size: 10.5px;
+}
+
+.period-unclassified {
+  display: grid;
+  gap: 4px;
+  padding-top: 12px;
+  border-top: 1px solid var(--rule);
+}
+
+.period-unclassified .data-label {
+  margin-bottom: 0;
+}
+
+.period-unclassified p {
+  margin: 0;
+  color: var(--ink);
+  font-size: var(--text-meta);
+}
+
+.period-unclassified small {
+  color: var(--ink-3);
+  font-size: 10.5px;
+}
+
+.trend-list li.is-current .bar-label {
+  font-weight: 600;
+}
+
+.history-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-3);
+  color: var(--ink-3);
+  font-size: var(--text-meta);
+}
+
+.history-latest {
+  color: var(--ink);
+  font-size: 18px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 500;
+  letter-spacing: -0.02em;
+}
+
+.history-plot {
+  position: relative;
+}
+
+.history-chart {
+  display: block;
+  width: 100%;
+  height: 72px;
+}
+
+.history-axis {
+  stroke: var(--rule);
+  stroke-width: 0.6;
+}
+
+.history-line {
+  fill: none;
+  stroke: var(--accent);
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.2;
+  vector-effect: non-scaling-stroke;
+}
+
+.history-dots {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.history-dot {
+  position: absolute;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--accent);
+  transform: translate(-50%, -50%);
+}
+
+.history-dot.is-current {
+  background: var(--solid);
+  box-shadow: 0 0 0 2px var(--surface);
+}
+
+.history-labels {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 4px var(--space-4);
+}
+
+.history-labels li {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-2);
+  color: var(--ink-2);
+  font-size: var(--text-meta);
+}
+
+.history-labels li.is-current {
+  color: var(--ink);
+  font-weight: 600;
 }
 
 .chart-details {
@@ -2382,6 +2535,58 @@ button {
       background-color var(--motion-base) var(--ease-out),
       border-color var(--motion-base) var(--ease-out),
       color var(--motion-base) var(--ease-out);
+  }
+
+  /* Entrada de conteúdo: navegação, troca de mês e alternância de gráfico. */
+  .page-transition,
+  .category-bars,
+  .donut-layout {
+    animation: rise-in var(--motion-base) var(--ease-out);
+  }
+
+  .category-select-menu {
+    transform-origin: top;
+    animation: menu-in var(--motion-base) var(--ease-out);
+  }
+
+  .category-select-caret {
+    transition: transform var(--motion-fast) var(--ease-out);
+  }
+
+  .category-select-trigger[aria-expanded="true"] .category-select-caret {
+    transform: rotate(180deg);
+  }
+
+  .bar-fill {
+    transition: width var(--motion-base) var(--ease-out);
+  }
+
+  .donut-slice {
+    transition:
+      stroke-dasharray var(--motion-base) var(--ease-out),
+      stroke-dashoffset var(--motion-base) var(--ease-out);
+  }
+
+  .category-select-option,
+  .account-list a,
+  .movement-list li {
+    transition:
+      background-color var(--motion-fast) var(--ease-out),
+      color var(--motion-fast) var(--ease-out);
+  }
+
+  @keyframes rise-in {
+    from {
+      opacity: 0;
+      transform: translateY(4px);
+    }
+  }
+
+  @keyframes menu-in {
+    from {
+      opacity: 0;
+      transform: translateY(-4px) scale(0.99);
+    }
   }
 }
 

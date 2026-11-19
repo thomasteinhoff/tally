@@ -21,12 +21,15 @@ import type {
   CreateTransferInput,
   CsvExportDto,
   DashboardDto,
+  ExpenseTrendDto,
   ExportCsvInput,
   InstallmentPlanDto,
   IntegrityReportDto,
   MovementDto,
   MovementFilter,
+  NetWorthHistoryDto,
   NetWorthReportDto,
+  PeriodSpendingReportDto,
   ReportFilter,
   RestoreResultDto,
   SettingsDto,
@@ -240,6 +243,28 @@ export function getNetWorthReport(
   asOf: string | null = null,
 ): Promise<NetWorthReportDto> {
   return invoke<NetWorthReportDto>("get_net_worth_report", { asOf });
+}
+
+export function getPeriodSpendingReport(
+  asOf: string | null = null,
+): Promise<PeriodSpendingReportDto> {
+  return invoke<PeriodSpendingReportDto>("get_period_spending_report", {
+    asOf,
+  });
+}
+
+export function getExpenseTrendReport(
+  asOf: string | null = null,
+): Promise<ExpenseTrendDto> {
+  return invoke<ExpenseTrendDto>("get_expense_trend_report", { asOf });
+}
+
+export function getNetWorthHistoryReport(
+  asOf: string | null = null,
+): Promise<NetWorthHistoryDto> {
+  return invoke<NetWorthHistoryDto>("get_net_worth_history_report", {
+    asOf,
+  });
 }
 
 export function getCommitmentsReport(

@@ -4,9 +4,10 @@ use tally_app::{
     CategoriesService, CategoryDto, CategoryReportDto, CommitmentsReportDto, CreateAccountInput,
     CreateAdjustmentInput, CreateCardPaymentInput, CreateCardPurchaseInput, CreateCategoryInput,
     CreateExpenseInput, CreateIncomeInput, CreateTransferInput, CsvExportDto, DashboardDto,
-    ExportCsvInput, InstallmentPlanDto, IntegrityReportDto, MovementDto, MovementFilter,
-    MovementsService, NetWorthReportDto, ReportFilter, ReportsService, RestoreResultDto,
-    SettingsDto, UpdateInstallmentPlanInput, UpdateMovementInput, UpdateSettingsInput,
+    ExpenseTrendDto, ExportCsvInput, InstallmentPlanDto, IntegrityReportDto, MovementDto,
+    MovementFilter, MovementsService, NetWorthHistoryDto, NetWorthReportDto,
+    PeriodSpendingReportDto, ReportFilter, ReportsService, RestoreResultDto, SettingsDto,
+    UpdateInstallmentPlanInput, UpdateMovementInput, UpdateSettingsInput,
 };
 use tally_infra::{
     DataTools, Database, SqliteAccountsRepository, SqliteBootstrapRepository,
@@ -388,6 +389,32 @@ pub async fn get_cash_flow_report(
     filter: ReportFilter,
 ) -> Result<CashFlowReportDto, AppError> {
     reports_service(state.inner())?.cash_flow(filter).await
+}
+
+#[tauri::command]
+pub async fn get_period_spending_report(
+    state: State<'_, AppState>,
+    as_of: Option<String>,
+) -> Result<PeriodSpendingReportDto, AppError> {
+    reports_service(state.inner())?.period_spending(as_of).await
+}
+
+#[tauri::command]
+pub async fn get_expense_trend_report(
+    state: State<'_, AppState>,
+    as_of: Option<String>,
+) -> Result<ExpenseTrendDto, AppError> {
+    reports_service(state.inner())?.expense_trend(as_of).await
+}
+
+#[tauri::command]
+pub async fn get_net_worth_history_report(
+    state: State<'_, AppState>,
+    as_of: Option<String>,
+) -> Result<NetWorthHistoryDto, AppError> {
+    reports_service(state.inner())?
+        .net_worth_history(as_of)
+        .await
 }
 
 #[tauri::command]

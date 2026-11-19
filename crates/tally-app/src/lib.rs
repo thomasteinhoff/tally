@@ -24,10 +24,11 @@ pub use dto::{
     CategoryTotalDto, CommitmentDto, CommitmentMonthDto, CommitmentsReportDto, CreateAccountInput,
     CreateAdjustmentInput, CreateCardPaymentInput, CreateCardPurchaseInput, CreateCategoryInput,
     CreateExpenseInput, CreateIncomeInput, CreateTransferInput, CsvExportDto, DashboardDto,
-    ExportCsvInput, InstallmentAllocationDto, InstallmentDto, InstallmentPlanDto,
-    IntegrityReportDto, MovementDto, MovementFilter, NetWorthAccountDto, NetWorthReportDto,
-    ReportFilter, RestoreResultDto, SettingsDto, StatementLineDto, UpdateInstallmentPlanInput,
-    UpdateMovementInput, UpdateSettingsInput,
+    ExpenseTrendDto, ExportCsvInput, InstallmentAllocationDto, InstallmentDto, InstallmentPlanDto,
+    IntegrityReportDto, MonthlyExpenseDto, MovementDto, MovementFilter, NetWorthAccountDto,
+    NetWorthHistoryDto, NetWorthPointDto, NetWorthReportDto, PeriodSpendingBucketDto,
+    PeriodSpendingReportDto, ReportFilter, RestoreResultDto, SettingsDto, StatementLineDto,
+    UpdateInstallmentPlanInput, UpdateMovementInput, UpdateSettingsInput,
 };
 pub use error::{AppError, AppErrorDto};
 pub use movements::{MovementsRepository, MovementsService, NewMovement};

@@ -86,6 +86,30 @@ async fn expense(
         .expect("expense should be created");
 }
 
+async fn expense_manual(
+    fixture: &Fixture,
+    account_id: &str,
+    category_id: &str,
+    amount_cents: i64,
+    occurred_on: &str,
+    manual_period: &str,
+) {
+    fixture
+        .movements
+        .create_expense(CreateExpenseInput {
+            account_id: account_id.to_owned(),
+            category_id: category_id.to_owned(),
+            amount_cents,
+            occurred_on: occurred_on.to_owned(),
+            occurred_time: None,
+            manual_period: Some(manual_period.to_owned()),
+            description: Some("Despesa".to_owned()),
+            payment_method: "pix".to_owned(),
+        })
+        .await
+        .expect("expense with manual period should be created");
+}
+
 async fn income(
     fixture: &Fixture,
     account_id: &str,
@@ -597,6 +621,160 @@ async fn dashboard_composes_current_month_balances_and_commitments() {
     assert_eq!(dashboard.net_worth_cents, 5_000);
     assert_eq!(dashboard.top_expenses.len(), 1);
     assert_eq!(dashboard.top_expenses[0].total_cents, 4_000);
+}
+
+#[tokio::test]
+async fn period_spending_counts_active_days_and_keeps_custom_separate() {
+    let fixture = fixture().await;
+    let bank = account(&fixture, "Banco", "bank", 0).await;
+    let mercado = category(&fixture, "Mercado", "expense").await;
+    let salario = category(&fixture, "Salario", "income").await;
+
+    expense(&fixture, &bank, &mercado, 1_000, "2026-02-03", "14:00").await;
+    expense(&fixture, &bank, &mercado, 2_000, "2026-02-03", "20:00").await;
+    expense(&fixture, &bank, &mercado, 3_000, "2026-02-10", "09:00").await;
+    expense_manual(&fixture, &bank, &mercado, 500, "2026-02-11", "custom").await;
+    expense_manual(&fixture, &bank, &mercado, 500, "2026-02-12", "custom").await;
+    income(&fixture, &bank, &salario, 9_000, "2026-02-03").await;
+
+    let report = fixture
+        .reports
+        .period_spending(Some("2026-02-15".to_owned()))
+        .await
+        .expect("period spending");
+
+    assert_eq!(report.from, "2026-02-01");
+    assert_eq!(report.to, "2026-02-28");
+    assert_eq!(report.total_cents, 7_000);
+    assert_eq!(report.entry_count, 5);
+    assert_eq!(report.days_with_expense, 4);
+    assert_eq!(
+        report
+            .buckets
+            .iter()
+            .map(|bucket| bucket.period.as_str())
+            .collect::<Vec<_>>(),
+        ["madrugada", "manha", "tarde", "noite"]
+    );
+
+    let manha = &report.buckets[1];
+    assert_eq!(manha.total_cents, 3_000);
+    assert_eq!(manha.active_days, 1);
+    assert_eq!(manha.average_cents, 3_000);
+    assert_eq!(manha.frequency_percent, 25.0);
+
+    let tarde = &report.buckets[2];
+    assert_eq!(tarde.total_cents, 1_000);
+    assert_eq!(tarde.average_cents, 1_000);
+
+    let noite = &report.buckets[3];
+    assert_eq!(noite.total_cents, 2_000);
+
+    assert_eq!(report.buckets[0].total_cents, 0);
+    assert_eq!(report.buckets[0].active_days, 0);
+    assert_eq!(report.buckets[0].frequency_percent, 0.0);
+
+    assert_eq!(report.unclassified.total_cents, 1_000);
+    assert_eq!(report.unclassified.entry_count, 2);
+    assert_eq!(report.unclassified.active_days, 2);
+    assert_eq!(report.unclassified.average_cents, 500);
+    assert_eq!(report.unclassified.frequency_percent, 50.0);
+
+    let empty = fixture
+        .reports
+        .period_spending(Some("2026-03-10".to_owned()))
+        .await
+        .expect("empty month");
+    assert_eq!(empty.total_cents, 0);
+    assert_eq!(empty.days_with_expense, 0);
+    assert!(empty.buckets.iter().all(|bucket| bucket.total_cents == 0));
+    assert_eq!(empty.unclassified.total_cents, 0);
+}
+
+#[tokio::test]
+async fn expense_trend_zero_fills_six_months_across_the_year_boundary() {
+    let fixture = fixture().await;
+    let bank = account(&fixture, "Banco", "bank", 0).await;
+    let savings = account(&fixture, "Poupanca", "savings", 0).await;
+    let mercado = category(&fixture, "Mercado", "expense").await;
+    let salario = category(&fixture, "Salario", "income").await;
+
+    expense(&fixture, &bank, &mercado, 1_000, "2025-11-10", "14:00").await;
+    expense(&fixture, &bank, &mercado, 2_000, "2025-12-10", "14:00").await;
+    expense(&fixture, &bank, &mercado, 3_000, "2026-01-10", "14:00").await;
+    expense(&fixture, &bank, &mercado, 4_000, "2026-02-10", "14:00").await;
+    income(&fixture, &bank, &salario, 9_000, "2026-02-10").await;
+    transfer(&fixture, &bank, &savings, 5_000, "2026-02-11").await;
+
+    let trend = fixture
+        .reports
+        .expense_trend(Some("2026-02-20".to_owned()))
+        .await
+        .expect("expense trend");
+
+    assert_eq!(trend.from_month, "2025-09");
+    assert_eq!(trend.to_month, "2026-02");
+    assert_eq!(
+        trend
+            .months
+            .iter()
+            .map(|month| month.month.as_str())
+            .collect::<Vec<_>>(),
+        [
+            "2025-09", "2025-10", "2025-11", "2025-12", "2026-01", "2026-02"
+        ]
+    );
+    assert_eq!(
+        trend
+            .months
+            .iter()
+            .map(|month| month.total_cents)
+            .collect::<Vec<_>>(),
+        [0, 0, 1_000, 2_000, 3_000, 4_000]
+    );
+    assert_eq!(trend.months[5].entry_count, 1);
+}
+
+#[tokio::test]
+async fn net_worth_history_has_six_monthly_points_ending_on_the_selected_month() {
+    let fixture = fixture().await;
+    let bank = account(&fixture, "Banco", "bank", 0).await;
+    let mercado = category(&fixture, "Mercado", "expense").await;
+    let salario = category(&fixture, "Salario", "income").await;
+
+    fixture
+        .movements
+        .create_adjustment(tally_app::CreateAdjustmentInput {
+            account_id: bank.clone(),
+            amount_cents: 100_000,
+            occurred_on: "2025-11-05".to_owned(),
+            description: Some("Saldo inicial".to_owned()),
+        })
+        .await
+        .expect("adjustment");
+    expense(&fixture, &bank, &mercado, 10_000, "2025-12-10", "14:00").await;
+    income(&fixture, &bank, &salario, 5_000, "2026-01-20").await;
+
+    let history = fixture
+        .reports
+        .net_worth_history(Some("2026-03-10".to_owned()))
+        .await
+        .expect("net worth history");
+
+    assert_eq!(history.from_month, "2025-10");
+    assert_eq!(history.to_month, "2026-03");
+    assert_eq!(history.points.len(), 6);
+    assert_eq!(history.points[5].as_of, "2026-03-31");
+    assert_eq!(
+        history
+            .points
+            .iter()
+            .map(|point| point.net_worth_cents)
+            .collect::<Vec<_>>(),
+        [0, 100_000, 90_000, 95_000, 95_000, 95_000]
+    );
+    assert_eq!(history.points[5].assets_cents, 95_000);
+    assert_eq!(history.points[5].liabilities_cents, 0);
 }
 
 #[allow(dead_code)]

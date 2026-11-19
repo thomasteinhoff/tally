@@ -227,43 +227,49 @@
     </header>
 
     <div class="content">
-      {#if route.name === "overview"}
-        <OverviewPage />
-      {:else if route.name === "analysis"}
-        <AnalysisPage />
-      {:else if route.name === "movements"}
-        <MovementsPage />
-      {:else if route.name === "accounts"}
-        <AccountsPage />
-      {:else if route.name === "statement"}
-        <StatementPage accountId={route.accountId} />
-      {:else if route.name === "cards"}
-        <CardsPage />
-      {:else if route.name === "card"}
-        <CardDetailPage cardId={route.cardId} />
-      {:else if route.name === "installments"}
-        <InstallmentsPage />
-      {:else if route.name === "installment"}
-        <InstallmentDetailPage planId={route.planId} />
-      {:else if route.name === "categories"}
-        <CategoriesPage />
-      {:else if route.name === "settings"}
-        <SettingsPage />
-      {:else}
-        <section class="panel">
-          <div class="state-panel">
-            <span class="state-kicker">404</span>
-            <h2>Rota não implementada.</h2>
-            <p>
-              O caminho <span class="mono">{route.path}</span> não existe nesta
-              aplicação.
-            </p>
-            <div class="state-actions">
-              <a class="button button--primary" href="#/">Voltar à visão geral</a>
-            </div>
-          </div>
-        </section>
-      {/if}
+      {#key route.name}
+        <div class="page-transition">
+          {#if route.name === "overview"}
+            <OverviewPage />
+          {:else if route.name === "analysis"}
+            <AnalysisPage />
+          {:else if route.name === "movements"}
+            <MovementsPage />
+          {:else if route.name === "accounts"}
+            <AccountsPage />
+          {:else if route.name === "statement"}
+            <StatementPage accountId={route.accountId} />
+          {:else if route.name === "cards"}
+            <CardsPage />
+          {:else if route.name === "card"}
+            <CardDetailPage cardId={route.cardId} />
+          {:else if route.name === "installments"}
+            <InstallmentsPage />
+          {:else if route.name === "installment"}
+            <InstallmentDetailPage planId={route.planId} />
+          {:else if route.name === "categories"}
+            <CategoriesPage />
+          {:else if route.name === "settings"}
+            <SettingsPage />
+          {:else}
+            <section class="panel">
+              <div class="state-panel">
+                <span class="state-kicker">404</span>
+                <h2>Rota não implementada.</h2>
+                <p>
+                  O caminho <span class="mono">{route.path}</span> não existe
+                  nesta aplicação.
+                </p>
+                <div class="state-actions">
+                  <a class="button button--primary" href="#/">
+                    Voltar à visão geral
+                  </a>
+                </div>
+              </div>
+            </section>
+          {/if}
+        </div>
+      {/key}
     </div>
   </main>
 </div>

@@ -112,6 +112,11 @@ export function formatMonth(isoMonth: string): string {
   return match ? `${match[2]}/${match[1]}` : isoMonth;
 }
 
+/** Dias ativos no período, com plural correto. */
+export function formatDays(count: number): string {
+  return `${count} ${count === 1 ? "dia ativo" : "dias ativos"}`;
+}
+
 export function todayIso(): string {
   const now = new Date();
   const month = String(now.getMonth() + 1).padStart(2, "0");

@@ -4,6 +4,7 @@ import {
   formatAmountInput,
   formatCents,
   formatDate,
+  formatDays,
   formatLimit,
   formatMonth,
   movementAmountForInput,
@@ -80,6 +81,9 @@ describe("formatação de apoio", () => {
     expect(formatDate("31/10/2026")).toBe("31/10/2026");
     expect(formatMonth("2026-10")).toBe("10/2026");
     expect(formatMonth("2026-10-31")).toBe("2026-10-31");
+    expect(formatDays(0)).toBe("0 dias ativos");
+    expect(formatDays(1)).toBe("1 dia ativo");
+    expect(formatDays(4)).toBe("4 dias ativos");
     expect(periodLabel("madrugada")).toBe("Madrugada");
     expect(periodLabel(null)).toBe("—");
   });

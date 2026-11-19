@@ -4,7 +4,10 @@
   import type { ReportFilter } from "../lib/api/bindings";
   import {
     getCashFlowReport,
+    getExpenseTrendReport,
     getIncomeReport,
+    getNetWorthHistoryReport,
+    getPeriodSpendingReport,
     getSpendingReport,
     listCategories,
     listInstallmentPlans,
@@ -13,6 +16,9 @@
   import { buildCategoryBars } from "../lib/category-chart";
   import CategoryChart from "../lib/components/CategoryChart.svelte";
   import CategoryIcon from "../lib/components/CategoryIcon.svelte";
+  import MonthlyExpenseTrend from "../lib/components/MonthlyExpenseTrend.svelte";
+  import NetWorthHistory from "../lib/components/NetWorthHistory.svelte";
+  import PeriodSpendingCard from "../lib/components/PeriodSpendingCard.svelte";
   import { normalizeError } from "../lib/errors";
   import {
     formatCents,
@@ -57,6 +63,21 @@
     queryFn: () => getCashFlowReport(filter),
   }));
 
+  const periodQuery = createQuery(() => ({
+    queryKey: ["reports", "period-spending", bounds.to],
+    queryFn: () => getPeriodSpendingReport(bounds.to),
+  }));
+
+  const trendQuery = createQuery(() => ({
+    queryKey: ["reports", "expense-trend", bounds.to],
+    queryFn: () => getExpenseTrendReport(bounds.to),
+  }));
+
+  const historyQuery = createQuery(() => ({
+    queryKey: ["reports", "net-worth-history", bounds.to],
+    queryFn: () => getNetWorthHistoryReport(bounds.to),
+  }));
+
   const categoriesQuery = createQuery(() => ({
     queryKey: ["categories", true],
     queryFn: () => listCategories(true),
@@ -90,6 +111,9 @@
   const spending = $derived(spendingQuery.data);
   const income = $derived(incomeQuery.data);
   const cashFlow = $derived(cashFlowQuery.data);
+  const period = $derived(periodQuery.data);
+  const trend = $derived(trendQuery.data);
+  const history = $derived(historyQuery.data);
 
   const spendingBars = $derived(buildCategoryBars(spending?.categories ?? []));
   const incomeBars = $derived(buildCategoryBars(income?.categories ?? []));
@@ -154,11 +178,17 @@
         ? normalizeError(incomeQuery.error)
         : cashFlowQuery.error
           ? normalizeError(cashFlowQuery.error)
-          : expensesQuery.error
-            ? normalizeError(expensesQuery.error)
-            : plansQuery.error
-              ? normalizeError(plansQuery.error)
-              : null,
+          : periodQuery.error
+            ? normalizeError(periodQuery.error)
+            : trendQuery.error
+              ? normalizeError(trendQuery.error)
+              : historyQuery.error
+                ? normalizeError(historyQuery.error)
+                : expensesQuery.error
+                  ? normalizeError(expensesQuery.error)
+                  : plansQuery.error
+                    ? normalizeError(plansQuery.error)
+                    : null,
   );
 
   function stepMonth(delta: number): void {
@@ -169,6 +199,9 @@
     void spendingQuery.refetch();
     void incomeQuery.refetch();
     void cashFlowQuery.refetch();
+    void periodQuery.refetch();
+    void trendQuery.refetch();
+    void historyQuery.refetch();
     void expensesQuery.refetch();
     void plansQuery.refetch();
   }
@@ -494,44 +527,130 @@
     {/if}
   </section>
 
-  <section class="panel" aria-labelledby="largest-title">
-    <header class="panel-header">
-      <div class="panel-heading">
-        <span class="panel-kicker">Destaques</span>
-        <h3 class="panel-title" id="largest-title">Maiores despesas do mês</h3>
-      </div>
-      <span class="panel-meta">top 5 · {formatDate(bounds.from)} – {formatDate(bounds.to)}</span>
-    </header>
+  <div class="analysis-grid">
+    <section class="panel" aria-labelledby="period-title">
+      <header class="panel-header">
+        <div class="panel-heading">
+          <span class="panel-kicker">Horários</span>
+          <h3 class="panel-title" id="period-title">
+            Gastos por período do dia
+          </h3>
+        </div>
+        <span class="panel-meta">{formatMonth(effectiveMonth)}</span>
+      </header>
 
-    {#if expensesQuery.isPending || plansQuery.isPending}
-      <div class="state-panel" aria-busy="true">
-        <span class="state-kicker">Lendo</span>
-        <h2>Comparando despesas.</h2>
-        <div class="loading-rule" aria-hidden="true"></div>
-      </div>
-    {:else if largestExpenses.length === 0}
-      <div class="empty-panel">
-        <p>Nenhuma despesa no mês selecionado.</p>
-      </div>
-    {:else}
-      <ul class="movement-list">
-        {#each largestExpenses as expense (expense.key)}
-          <li>
-            <div class="movement-list-main">
-              <span class="expense-label">
-                <CategoryIcon icon={expense.icon} size={16} />
-                <span>{expense.label}</span>
-              </span>
-              <small>
-                {formatDate(expense.date)} ·
-                {expense.categoryName ?? "Sem categoria"} ·
-                {expense.sourceName}
-              </small>
-            </div>
-            <span class="mono">{formatCents(expense.amountCents)}</span>
-          </li>
-        {/each}
-      </ul>
-    {/if}
-  </section>
+      {#if periodQuery.isPending}
+        <div class="state-panel" aria-busy="true">
+          <span class="state-kicker">Lendo</span>
+          <h2>Agrupando os horários.</h2>
+          <div class="loading-rule" aria-hidden="true"></div>
+        </div>
+      {:else if !period || period.entry_count === 0}
+        <div class="empty-panel">
+          <p>Nenhuma despesa no mês selecionado.</p>
+        </div>
+      {:else}
+        <PeriodSpendingCard report={period} />
+      {/if}
+    </section>
+
+    <section class="panel" aria-labelledby="trend-title">
+      <header class="panel-header">
+        <div class="panel-heading">
+          <span class="panel-kicker">Comparação</span>
+          <h3 class="panel-title" id="trend-title">
+            Evolução dos gastos mensais
+          </h3>
+        </div>
+        <span class="panel-meta">mês selecionado + 5 anteriores</span>
+      </header>
+
+      {#if trendQuery.isPending}
+        <div class="state-panel" aria-busy="true">
+          <span class="state-kicker">Lendo</span>
+          <h2>Montando a série.</h2>
+          <div class="loading-rule" aria-hidden="true"></div>
+        </div>
+      {:else if !trend || trend.months.length === 0}
+        <div class="empty-panel">
+          <p>Série indisponível.</p>
+        </div>
+      {:else}
+        <MonthlyExpenseTrend {trend} selectedMonth={effectiveMonth} />
+      {/if}
+    </section>
+  </div>
+
+  <div class="analysis-grid">
+    <section class="panel" aria-labelledby="largest-title">
+      <header class="panel-header">
+        <div class="panel-heading">
+          <span class="panel-kicker">Destaques</span>
+          <h3 class="panel-title" id="largest-title">
+            Maiores despesas do mês
+          </h3>
+        </div>
+        <span class="panel-meta">
+          top 5 · {formatDate(bounds.from)} – {formatDate(bounds.to)}
+        </span>
+      </header>
+
+      {#if expensesQuery.isPending || plansQuery.isPending}
+        <div class="state-panel" aria-busy="true">
+          <span class="state-kicker">Lendo</span>
+          <h2>Comparando despesas.</h2>
+          <div class="loading-rule" aria-hidden="true"></div>
+        </div>
+      {:else if largestExpenses.length === 0}
+        <div class="empty-panel">
+          <p>Nenhuma despesa no mês selecionado.</p>
+        </div>
+      {:else}
+        <ul class="movement-list">
+          {#each largestExpenses as expense (expense.key)}
+            <li>
+              <div class="movement-list-main">
+                <span class="expense-label">
+                  <CategoryIcon icon={expense.icon} size={16} />
+                  <span>{expense.label}</span>
+                </span>
+                <small>
+                  {formatDate(expense.date)} ·
+                  {expense.categoryName ?? "Sem categoria"} ·
+                  {expense.sourceName}
+                </small>
+              </div>
+              <span class="mono">{formatCents(expense.amountCents)}</span>
+            </li>
+          {/each}
+        </ul>
+      {/if}
+    </section>
+
+    <section class="panel" aria-labelledby="net-worth-history-title">
+      <header class="panel-header">
+        <div class="panel-heading">
+          <span class="panel-kicker">Patrimônio</span>
+          <h3 class="panel-title" id="net-worth-history-title">
+            Patrimônio histórico
+          </h3>
+        </div>
+        <span class="panel-meta">fechamento de cada mês</span>
+      </header>
+
+      {#if historyQuery.isPending}
+        <div class="state-panel" aria-busy="true">
+          <span class="state-kicker">Lendo</span>
+          <h2>Calculando a série.</h2>
+          <div class="loading-rule" aria-hidden="true"></div>
+        </div>
+      {:else if !history || history.points.length === 0}
+        <div class="empty-panel">
+          <p>Série indisponível.</p>
+        </div>
+      {:else}
+        <NetWorthHistory {history} />
+      {/if}
+    </section>
+  </div>
 {/if}

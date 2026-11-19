@@ -3,14 +3,15 @@ use chrono::{Datelike, Local, Months, NaiveDate};
 use tally_domain::movement::PaymentMethod;
 
 use crate::dto::{
-    CashFlowReportDto, CategoryReportDto, CommitmentsReportDto, DashboardDto, NetWorthReportDto,
-    ReportFilter,
+    CashFlowReportDto, CategoryReportDto, CommitmentsReportDto, DashboardDto, ExpenseTrendDto,
+    NetWorthHistoryDto, NetWorthReportDto, PeriodSpendingReportDto, ReportFilter,
 };
 use crate::error::AppError;
 
 const VALID_PERIODS: [&str; 5] = ["madrugada", "manha", "tarde", "noite", "custom"];
 const DEFAULT_COMMITMENT_MONTHS: u32 = 12;
 const MAX_COMMITMENT_MONTHS: u32 = 60;
+const TREND_MONTHS: u32 = 6;
 
 /// Filtro já resolvido (datas obrigatórias) usado pelo repositório.
 #[derive(Debug, Clone)]
@@ -32,6 +33,23 @@ pub trait ReportsRepository: Send + Sync {
     ) -> Result<CategoryReportDto, AppError>;
 
     async fn cash_flow(&self, query: &ReportQuery) -> Result<CashFlowReportDto, AppError>;
+
+    async fn period_spending(
+        &self,
+        query: &ReportQuery,
+    ) -> Result<PeriodSpendingReportDto, AppError>;
+
+    /// `months` são os rótulos `AAAA-MM` da série, em ordem; a resposta é
+    /// preenchida com zero para meses sem despesa.
+    async fn expense_trend(
+        &self,
+        from: &str,
+        to: &str,
+        months: &[String],
+    ) -> Result<ExpenseTrendDto, AppError>;
+
+    /// `dates` são os fechamentos mensais da série, em ordem crescente.
+    async fn net_worth_history(&self, dates: &[String]) -> Result<NetWorthHistoryDto, AppError>;
 
     async fn net_worth(&self, as_of: &str) -> Result<NetWorthReportDto, AppError>;
 
@@ -69,6 +87,50 @@ impl<R: ReportsRepository> ReportsService<R> {
     pub async fn cash_flow(&self, filter: ReportFilter) -> Result<CashFlowReportDto, AppError> {
         let query = resolve_query(filter)?;
         self.repo.cash_flow(&query).await
+    }
+
+    /// Gastos por faixa do dia no mês de `as_of` (padrão: mês corrente).
+    pub async fn period_spending(
+        &self,
+        as_of: Option<String>,
+    ) -> Result<PeriodSpendingReportDto, AppError> {
+        let date = resolve_date(as_of, "as_of")?.unwrap_or_else(today);
+        let query = ReportQuery {
+            from: format_date(first_of_month(date)),
+            to: format_date(end_of_month(date)),
+            period: None,
+            category_id: None,
+            account_id: None,
+            payment_method: None,
+        };
+        self.repo.period_spending(&query).await
+    }
+
+    /// Despesas por competência nos seis meses terminando no mês de `as_of`.
+    pub async fn expense_trend(&self, as_of: Option<String>) -> Result<ExpenseTrendDto, AppError> {
+        let date = resolve_date(as_of, "as_of")?.unwrap_or_else(today);
+        let months = month_starts_ending_at(date, TREND_MONTHS);
+        let from = format_date(months[0]);
+        let to = format_date(end_of_month(months[months.len() - 1]));
+        let labels = months
+            .iter()
+            .map(|month| month.format("%Y-%m").to_string())
+            .collect::<Vec<_>>();
+        self.repo.expense_trend(&from, &to, &labels).await
+    }
+
+    /// Patrimônio líquido no fechamento de cada um dos seis meses terminando
+    /// no mês de `as_of`; o último ponto é o fechamento do mês selecionado.
+    pub async fn net_worth_history(
+        &self,
+        as_of: Option<String>,
+    ) -> Result<NetWorthHistoryDto, AppError> {
+        let date = resolve_date(as_of, "as_of")?.unwrap_or_else(today);
+        let dates = month_starts_ending_at(date, TREND_MONTHS)
+            .iter()
+            .map(|month| format_date(end_of_month(*month)))
+            .collect::<Vec<_>>();
+        self.repo.net_worth_history(&dates).await
     }
 
     pub async fn net_worth(&self, as_of: Option<String>) -> Result<NetWorthReportDto, AppError> {
@@ -219,13 +281,30 @@ fn add_months_end(date: NaiveDate, months: u32) -> NaiveDate {
         .expect("o horizonte é limitado a 60 meses")
 }
 
+/// Primeiro dia de cada mês da série, em ordem crescente, terminando no mês
+/// de `date`.
+fn month_starts_ending_at(date: NaiveDate, count: u32) -> Vec<NaiveDate> {
+    assert!(count > 0, "a série precisa de pelo menos um mês");
+    let start = first_of_month(date)
+        .checked_sub_months(Months::new(count - 1))
+        .expect("série mensal limitada a valores válidos");
+
+    (0..count)
+        .map(|offset| {
+            start
+                .checked_add_months(Months::new(offset))
+                .expect("mês da série é sempre válido")
+        })
+        .collect()
+}
+
 fn format_date(date: NaiveDate) -> String {
     date.format("%Y-%m-%d").to_string()
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{add_months_end, end_of_month, resolve_query};
+    use super::{add_months_end, end_of_month, month_starts_ending_at, resolve_query};
     use crate::dto::ReportFilter;
     use crate::error::AppError;
     use chrono::NaiveDate;
@@ -284,6 +363,36 @@ mod tests {
                 .format("%Y-%m-%d")
                 .to_string(),
             "2027-01-31"
+        );
+    }
+
+    #[test]
+    fn six_month_series_crosses_the_year_boundary() {
+        let months = month_starts_ending_at(date("2026-02-15"), 6)
+            .iter()
+            .map(|month| month.format("%Y-%m").to_string())
+            .collect::<Vec<_>>();
+        assert_eq!(
+            months,
+            [
+                "2025-09", "2025-10", "2025-11", "2025-12", "2026-01", "2026-02"
+            ]
+        );
+
+        let ends = month_starts_ending_at(date("2026-03-31"), 6)
+            .iter()
+            .map(|month| end_of_month(*month).format("%Y-%m-%d").to_string())
+            .collect::<Vec<_>>();
+        assert_eq!(
+            ends,
+            [
+                "2025-10-31",
+                "2025-11-30",
+                "2025-12-31",
+                "2026-01-31",
+                "2026-02-28",
+                "2026-03-31",
+            ]
         );
     }
 }

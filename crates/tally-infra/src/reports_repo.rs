@@ -1,15 +1,20 @@
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 use async_trait::async_trait;
 use rusqlite::{Connection, params};
 use tally_app::dto::{
     CashFlowGroupDto, CashFlowMonthDto, CashFlowReportDto, CategoryReportDto, CategoryTotalDto,
-    CommitmentDto, CommitmentMonthDto, CommitmentsReportDto, NetWorthAccountDto, NetWorthReportDto,
+    CommitmentDto, CommitmentMonthDto, CommitmentsReportDto, ExpenseTrendDto, MonthlyExpenseDto,
+    NetWorthAccountDto, NetWorthHistoryDto, NetWorthPointDto, NetWorthReportDto,
+    PeriodSpendingBucketDto, PeriodSpendingReportDto,
 };
 use tally_app::error::AppError;
 use tally_app::reports::{ReportQuery, ReportsRepository};
 
 use crate::db::Database;
+
+const PERIOD_BANDS: [&str; 4] = ["madrugada", "manha", "tarde", "noite"];
+const UNCLASSIFIED: &str = "unclassified";
 
 #[derive(Clone)]
 pub struct SqliteReportsRepository {
@@ -214,6 +219,243 @@ impl ReportsRepository for SqliteReportsRepository {
             .await
     }
 
+    async fn period_spending(
+        &self,
+        query: &ReportQuery,
+    ) -> Result<PeriodSpendingReportDto, AppError> {
+        let query = query.clone();
+
+        self.db
+            .call(move |connection| {
+                let mut statement = connection.prepare(
+                    "SELECT e.period, e.occurred_on, SUM(p.amount_cents) AS total,
+                            COUNT(DISTINCT e.id) AS entries
+                     FROM journal_entries e
+                     JOIN postings p ON p.entry_id = e.id
+                     JOIN accounts a ON a.id = p.account_id
+                                    AND a.is_system = 1 AND a.class = 'expense'
+                     WHERE e.posted_at IS NOT NULL
+                       AND e.kind = 'expense'
+                       AND e.occurred_on BETWEEN ?1 AND ?2
+                     GROUP BY e.period, e.occurred_on",
+                )?;
+
+                let rows = statement.query_map(
+                    params![query.from.as_str(), query.to.as_str()],
+                    |row| {
+                        Ok((
+                            row.get::<_, Option<String>>(0)?,
+                            row.get::<_, String>(1)?,
+                            row.get::<_, i64>(2)?,
+                            row.get::<_, i64>(3)?,
+                        ))
+                    },
+                )?;
+
+                let mut buckets: BTreeMap<String, BucketAccumulator> = BTreeMap::new();
+                let mut days_with_expense = BTreeSet::new();
+
+                for row in rows {
+                    let (period, occurred_on, total_cents, entry_count) = row?;
+                    let key = match period.as_deref() {
+                        Some(value) if PERIOD_BANDS.contains(&value) => value.to_owned(),
+                        // Período manual (`custom`) e ausente ficam fora das faixas.
+                        _ => UNCLASSIFIED.to_owned(),
+                    };
+
+                    let bucket = buckets.entry(key).or_default();
+                    bucket.total_cents += total_cents;
+                    bucket.entry_count += entry_count;
+                    bucket.days.insert(occurred_on.clone());
+                    days_with_expense.insert(occurred_on);
+                }
+
+                let days_with_expense = days_with_expense.len() as i64;
+                let make = |key: &str| {
+                    let bucket = buckets.get(key);
+                    let total_cents = bucket.map_or(0, |item| item.total_cents);
+                    let entry_count = bucket.map_or(0, |item| item.entry_count);
+                    let active_days = bucket.map_or(0, |item| item.days.len() as i64);
+
+                    PeriodSpendingBucketDto {
+                        period: key.to_owned(),
+                        total_cents,
+                        entry_count,
+                        active_days,
+                        average_cents: if active_days > 0 {
+                            total_cents / active_days
+                        } else {
+                            0
+                        },
+                        frequency_percent: if days_with_expense > 0 {
+                            active_days as f64 / days_with_expense as f64 * 100.0
+                        } else {
+                            0.0
+                        },
+                    }
+                };
+
+                let total_cents = buckets.values().map(|item| item.total_cents).sum();
+                let entry_count = buckets.values().map(|item| item.entry_count).sum();
+                let bands = PERIOD_BANDS.iter().map(|band| make(band)).collect();
+                let unclassified = make(UNCLASSIFIED);
+
+                Ok(PeriodSpendingReportDto {
+                    from: query.from,
+                    to: query.to,
+                    total_cents,
+                    entry_count,
+                    days_with_expense,
+                    buckets: bands,
+                    unclassified,
+                })
+            })
+            .await
+    }
+
+    async fn expense_trend(
+        &self,
+        from: &str,
+        to: &str,
+        months: &[String],
+    ) -> Result<ExpenseTrendDto, AppError> {
+        let from = from.to_owned();
+        let to = to.to_owned();
+        let months = months.to_vec();
+
+        self.db
+            .call(move |connection| {
+                let mut statement = connection.prepare(
+                    "SELECT substr(e.occurred_on, 1, 7) AS month,
+                            SUM(p.amount_cents) AS total,
+                            COUNT(DISTINCT e.id) AS entries
+                     FROM journal_entries e
+                     JOIN postings p ON p.entry_id = e.id
+                     JOIN accounts a ON a.id = p.account_id
+                                    AND a.is_system = 1 AND a.class = 'expense'
+                     WHERE e.posted_at IS NOT NULL
+                       AND e.kind = 'expense'
+                       AND e.occurred_on BETWEEN ?1 AND ?2
+                     GROUP BY month",
+                )?;
+
+                let rows = statement.query_map(params![from.as_str(), to.as_str()], |row| {
+                    Ok((
+                        row.get::<_, String>(0)?,
+                        row.get::<_, i64>(1)?,
+                        row.get::<_, i64>(2)?,
+                    ))
+                })?;
+
+                let mut totals = BTreeMap::new();
+                for row in rows {
+                    let (month, total_cents, entry_count) = row?;
+                    totals.insert(month, (total_cents, entry_count));
+                }
+
+                let months = months
+                    .into_iter()
+                    .map(|month| {
+                        let (total_cents, entry_count) =
+                            totals.get(&month).copied().unwrap_or((0, 0));
+                        MonthlyExpenseDto {
+                            month,
+                            total_cents,
+                            entry_count,
+                        }
+                    })
+                    .collect::<Vec<_>>();
+
+                Ok(ExpenseTrendDto {
+                    from_month: months
+                        .first()
+                        .map_or_else(String::new, |item| item.month.clone()),
+                    to_month: months
+                        .last()
+                        .map_or_else(String::new, |item| item.month.clone()),
+                    months,
+                })
+            })
+            .await
+    }
+
+    async fn net_worth_history(&self, dates: &[String]) -> Result<NetWorthHistoryDto, AppError> {
+        let dates = dates.to_vec();
+
+        self.db
+            .call(move |connection| {
+                let values = (1..=dates.len())
+                    .map(|index| format!("SELECT ?{index} AS as_of"))
+                    .collect::<Vec<_>>()
+                    .join(" UNION ALL ");
+                let sql = format!(
+                    "WITH dates AS ({values})
+                     SELECT d.as_of, a.class,
+                            COALESCE((
+                                SELECT SUM(p.amount_cents)
+                                FROM postings p
+                                JOIN journal_entries e ON e.id = p.entry_id
+                                WHERE p.account_id = a.id
+                                  AND e.posted_at IS NOT NULL
+                                  AND e.occurred_on <= d.as_of
+                            ), 0) AS balance_cents
+                     FROM dates d
+                     CROSS JOIN accounts a
+                     WHERE a.class IN ('asset', 'liability')
+                     ORDER BY d.as_of, a.class"
+                );
+
+                let mut statement = connection.prepare(&sql)?;
+                let rows = statement.query_map(
+                    rusqlite::params_from_iter(dates.iter().map(String::as_str)),
+                    |row| {
+                        Ok((
+                            row.get::<_, String>(0)?,
+                            row.get::<_, String>(1)?,
+                            row.get::<_, i64>(2)?,
+                        ))
+                    },
+                )?;
+
+                let mut totals: BTreeMap<String, (i64, i64)> = BTreeMap::new();
+                for row in rows {
+                    let (as_of, class, balance_cents) = row?;
+                    let entry = totals.entry(as_of).or_default();
+                    if class == "asset" {
+                        entry.0 += balance_cents;
+                    } else {
+                        entry.1 += -balance_cents;
+                    }
+                }
+
+                let points = dates
+                    .into_iter()
+                    .map(|as_of| {
+                        let (assets_cents, liabilities_cents) =
+                            totals.get(&as_of).copied().unwrap_or((0, 0));
+                        NetWorthPointDto {
+                            month: as_of.get(..7).unwrap_or(&as_of).to_owned(),
+                            as_of,
+                            net_worth_cents: assets_cents - liabilities_cents,
+                            assets_cents,
+                            liabilities_cents,
+                        }
+                    })
+                    .collect::<Vec<_>>();
+
+                Ok(NetWorthHistoryDto {
+                    from_month: points
+                        .first()
+                        .map_or_else(String::new, |point| point.month.clone()),
+                    to_month: points
+                        .last()
+                        .map_or_else(String::new, |point| point.month.clone()),
+                    points,
+                })
+            })
+            .await
+    }
+
     async fn net_worth(&self, as_of: &str) -> Result<NetWorthReportDto, AppError> {
         let as_of = as_of.to_owned();
 
@@ -399,6 +641,13 @@ impl ReportsRepository for SqliteReportsRepository {
             })
             .await
     }
+}
+
+#[derive(Default)]
+struct BucketAccumulator {
+    total_cents: i64,
+    entry_count: i64,
+    days: BTreeSet<String>,
 }
 
 fn cash_flow_label(kind: &str, category_name: Option<&str>) -> String {

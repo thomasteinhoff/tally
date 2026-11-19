@@ -450,6 +450,85 @@ pub struct CashFlowReportDto {
     pub months: Vec<CashFlowMonthDto>,
 }
 
+/// Faixa do dia no relatório de gastos por período. `average_cents` usa apenas
+/// os dias ativos da faixa; `frequency_percent` usa os dias com qualquer
+/// despesa no mês e pode passar de 100% quando um dia tem mais de uma faixa.
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[ts(export, export_to = "../../../src/lib/api/bindings/")]
+pub struct PeriodSpendingBucketDto {
+    /// `madrugada`, `manha`, `tarde`, `noite` ou `unclassified`.
+    pub period: String,
+    #[ts(type = "number")]
+    pub total_cents: i64,
+    #[ts(type = "number")]
+    pub entry_count: i64,
+    #[ts(type = "number")]
+    pub active_days: i64,
+    #[ts(type = "number")]
+    pub average_cents: i64,
+    #[ts(type = "number")]
+    pub frequency_percent: f64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[ts(export, export_to = "../../../src/lib/api/bindings/")]
+pub struct PeriodSpendingReportDto {
+    pub from: String,
+    pub to: String,
+    #[ts(type = "number")]
+    pub total_cents: i64,
+    #[ts(type = "number")]
+    pub entry_count: i64,
+    #[ts(type = "number")]
+    pub days_with_expense: i64,
+    /// As quatro faixas, sempre presentes e em ordem fixa.
+    pub buckets: Vec<PeriodSpendingBucketDto>,
+    /// Período manual (`custom`) ou ausente; nunca redistribuído nas faixas.
+    pub unclassified: PeriodSpendingBucketDto,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[ts(export, export_to = "../../../src/lib/api/bindings/")]
+pub struct MonthlyExpenseDto {
+    pub month: String,
+    #[ts(type = "number")]
+    pub total_cents: i64,
+    #[ts(type = "number")]
+    pub entry_count: i64,
+}
+
+/// Despesas por competência, preenchidas com zero para todo mês da série.
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[ts(export, export_to = "../../../src/lib/api/bindings/")]
+pub struct ExpenseTrendDto {
+    pub from_month: String,
+    pub to_month: String,
+    pub months: Vec<MonthlyExpenseDto>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[ts(export, export_to = "../../../src/lib/api/bindings/")]
+pub struct NetWorthPointDto {
+    pub month: String,
+    /// Último dia do mês do ponto.
+    pub as_of: String,
+    #[ts(type = "number")]
+    pub net_worth_cents: i64,
+    #[ts(type = "number")]
+    pub assets_cents: i64,
+    #[ts(type = "number")]
+    pub liabilities_cents: i64,
+}
+
+/// Série histórica do patrimônio líquido; não altera o patrimônio atual.
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[ts(export, export_to = "../../../src/lib/api/bindings/")]
+pub struct NetWorthHistoryDto {
+    pub from_month: String,
+    pub to_month: String,
+    pub points: Vec<NetWorthPointDto>,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
 #[ts(export, export_to = "../../../src/lib/api/bindings/")]
 pub struct NetWorthAccountDto {
