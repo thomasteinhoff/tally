@@ -120,7 +120,7 @@ impl ReportsRepository for SqliteReportsRepository {
                      FROM journal_entries e
                      JOIN postings p ON p.entry_id = e.id
                      JOIN accounts a ON a.id = p.account_id
-                                    AND a.is_system = 0 AND a.class = 'asset'
+                                    AND a.is_system = 0 AND a.class = 'asset' AND a.is_savings = 0
                      LEFT JOIN categories c ON c.id = e.category_id
                      WHERE e.posted_at IS NOT NULL
                        AND e.kind IN ('expense', 'income', 'card_payment', 'adjustment')
@@ -390,7 +390,7 @@ impl ReportsRepository for SqliteReportsRepository {
                     .join(" UNION ALL ");
                 let sql = format!(
                     "WITH dates AS ({values})
-                     SELECT d.as_of, a.class,
+                     SELECT d.as_of, a.class, a.is_savings,
                             COALESCE((
                                 SELECT SUM(p.amount_cents)
                                 FROM postings p
@@ -413,15 +413,18 @@ impl ReportsRepository for SqliteReportsRepository {
                             row.get::<_, String>(0)?,
                             row.get::<_, String>(1)?,
                             row.get::<_, i64>(2)?,
+                            row.get::<_, i64>(3)?,
                         ))
                     },
                 )?;
 
-                let mut totals: BTreeMap<String, (i64, i64)> = BTreeMap::new();
+                let mut totals: BTreeMap<String, (i64, i64, i64)> = BTreeMap::new();
                 for row in rows {
-                    let (as_of, class, balance_cents) = row?;
+                    let (as_of, class, is_savings, balance_cents) = row?;
                     let entry = totals.entry(as_of).or_default();
-                    if class == "asset" {
+                    if class == "asset" && is_savings == 1 {
+                        entry.2 += balance_cents;
+                    } else if class == "asset" {
                         entry.0 += balance_cents;
                     } else {
                         entry.1 += -balance_cents;
@@ -431,14 +434,17 @@ impl ReportsRepository for SqliteReportsRepository {
                 let points = dates
                     .into_iter()
                     .map(|as_of| {
-                        let (assets_cents, liabilities_cents) =
-                            totals.get(&as_of).copied().unwrap_or((0, 0));
+                        let (assets_cents, liabilities_cents, savings_cents) =
+                            totals.get(&as_of).copied().unwrap_or((0, 0, 0));
+                        let net_worth_cents = assets_cents - liabilities_cents;
                         NetWorthPointDto {
                             month: as_of.get(..7).unwrap_or(&as_of).to_owned(),
                             as_of,
-                            net_worth_cents: assets_cents - liabilities_cents,
+                            net_worth_cents,
                             assets_cents,
                             liabilities_cents,
+                            savings_cents,
+                            total_with_savings_cents: net_worth_cents + savings_cents,
                         }
                     })
                     .collect::<Vec<_>>();
@@ -462,7 +468,7 @@ impl ReportsRepository for SqliteReportsRepository {
         self.db
             .call(move |connection| {
                 let mut statement = connection.prepare(
-                    "SELECT a.id, a.name, a.type, a.is_system, a.class,
+                    "SELECT a.id, a.name, a.type, a.is_system, a.class, a.is_savings,
                             COALESCE((
                                 SELECT SUM(p.amount_cents)
                                 FROM postings p
@@ -484,19 +490,27 @@ impl ReportsRepository for SqliteReportsRepository {
                         row.get::<_, i64>(3)?,
                         row.get::<_, String>(4)?,
                         row.get::<_, i64>(5)?,
+                        row.get::<_, i64>(6)?,
                     ))
                 })?;
 
                 let mut assets_cents = 0_i64;
                 let mut liabilities_cents = 0_i64;
+                let mut savings_cents = 0_i64;
                 let mut deferred_expense_cents = 0_i64;
                 let mut accounts = Vec::new();
 
                 for row in rows {
-                    let (id, name, account_type, is_system, class, balance_cents) = row?;
+                    let (id, name, account_type, is_system, class, is_savings, balance_cents) =
+                        row?;
 
                     match class.as_str() {
                         "asset" => {
+                            if is_savings == 1 {
+                                // Arquivados continuam aqui: saldo não desaparece do total.
+                                savings_cents += balance_cents;
+                                continue;
+                            }
                             assets_cents += balance_cents;
                             if is_system == 1 {
                                 deferred_expense_cents += balance_cents;
@@ -517,12 +531,15 @@ impl ReportsRepository for SqliteReportsRepository {
                     }
                 }
 
+                let net_worth_cents = assets_cents - liabilities_cents;
                 Ok(NetWorthReportDto {
                     as_of,
                     assets_cents,
                     liabilities_cents,
-                    net_worth_cents: assets_cents - liabilities_cents,
+                    net_worth_cents,
                     deferred_expense_cents,
+                    savings_cents,
+                    total_with_savings_cents: net_worth_cents + savings_cents,
                     accounts,
                 })
             })

@@ -29,13 +29,21 @@
   const initial = untrack(() => ({
     editing: account !== null,
     name: account?.name ?? "",
-    accountType: account?.account_type ?? presetType ?? "bank",
+    accountType: account?.is_savings
+      ? "cofrinho"
+      : (account?.account_type ?? presetType ?? "bank"),
     lockType: account !== null || presetType !== null,
     creditLimitText:
       account?.credit_limit_cents !== null &&
       account?.credit_limit_cents !== undefined
         ? formatAmountInput(account.credit_limit_cents)
         : "",
+    yieldMode: account?.yield_mode ?? "calendar",
+    cdiPercentText:
+      account?.cdi_percent_bps !== null &&
+      account?.cdi_percent_bps !== undefined
+        ? String(account.cdi_percent_bps / 100)
+        : "100",
   }));
   const editing = initial.editing;
   const lockType = initial.lockType;
@@ -43,6 +51,7 @@
     "bank",
     "cash",
     "savings",
+    "cofrinho",
     "investment",
     "digital_wallet",
     "other_asset",
@@ -53,9 +62,12 @@
   let accountType = $state(initial.accountType);
   let openingText = $state("0,00");
   let creditLimitText = $state(initial.creditLimitText);
+  const isSavings = $derived(accountType === "cofrinho");
+  let yieldMode = $state(initial.yieldMode);
+  let cdiPercentText = $state(initial.cdiPercentText);
   let localError = $state<string | null>(null);
 
-  const isCard = $derived(accountType === "credit_card");
+  const isCard = $derived(!isSavings && accountType === "credit_card");
 
   function submit(): void {
     localError = null;
@@ -88,13 +100,29 @@
       }
     }
 
+    let cdiPercent: number | null = null;
+    if (isSavings) {
+      cdiPercent = Number(cdiPercentText.replace(",", "."));
+      if (
+        !Number.isFinite(cdiPercent) ||
+        cdiPercent <= 0 ||
+        cdiPercent > 10_000
+      ) {
+        localError = "Informe um percentual do CDI entre 0 e 10000.";
+        return;
+      }
+    }
+
     onsave({
       mode: editing ? "edit" : "create",
       id: account?.id ?? null,
       name: name.trim(),
-      accountType,
+      accountType: isSavings ? "savings" : accountType,
       openingBalanceCents: openingBalanceCents ?? 0,
-      creditLimitCents,
+      creditLimitCents: isSavings ? null : creditLimitCents,
+      isSavings,
+      yieldMode: isSavings ? yieldMode : null,
+      cdiPercent,
     });
   }
 </script>
@@ -102,9 +130,11 @@
 <Modal
   title={editing
     ? "Editar conta"
-    : isCard
-      ? "Novo cartão"
-      : "Nova conta"}
+    : isSavings
+      ? "Novo cofrinho"
+      : isCard
+        ? "Novo cartão"
+        : "Nova conta"}
   {onclose}
 >
   <form
@@ -146,6 +176,25 @@
         </label>
       {/if}
 
+      {#if isSavings}
+        <label class="field">
+          <span>Dias de rendimento</span>
+          <select bind:value={yieldMode}>
+            <option value="calendar">Todos os dias</option>
+            <option value="business">Somente dias úteis</option>
+          </select>
+        </label>
+        <label class="field">
+          <span>Percentual do CDI</span>
+          <input
+            class="money-input"
+            inputmode="decimal"
+            bind:value={cdiPercentText}
+            placeholder="100"
+          />
+        </label>
+      {/if}
+
       {#if isCard}
         <label class="field">
           <span>Limite de crédito <small>opcional</small></span>
@@ -159,7 +208,15 @@
       {/if}
     </div>
 
-    {#if isCard}
+    {#if isSavings}
+      <p class="form-hint">
+        O saldo inicial entra como abertura, sem transferência, e fica de fora
+        do patrimônio principal. Aplicações e resgates usam transferências. O
+        rendimento é calculado sobre o saldo no início do dia e não entra em
+        receitas, despesas ou fluxo de caixa. A modalidade e o percentual não
+        podem ser alterados depois.
+      </p>
+    {:else if isCard}
       <p class="form-hint">
         O cartão é um passivo: não tem saldo de ativo nem aceita saldo negativo.
         {#if !editing}

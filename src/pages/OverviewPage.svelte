@@ -41,7 +41,13 @@
   const movements = $derived(movementsQuery.data ?? []);
   const accounts = $derived(accountsQuery.data ?? []);
   const cashAccounts = $derived(
-    accounts.filter((account) => account.account_type !== "credit_card"),
+    accounts.filter(
+      (account) =>
+        account.account_type !== "credit_card" && !account.is_savings,
+    ),
+  );
+  const savingsAccounts = $derived(
+    accounts.filter((account) => account.is_savings && !account.archived_at),
   );
   const cards = $derived(cardsQuery.data ?? []);
   const activeCards = $derived(cards.filter((card) => !card.archived_at));
@@ -164,14 +170,14 @@
 
   <section class="ledger-hero" aria-label="Resumo financeiro">
     <div class="hero-main">
-      <span class="hero-label">Patrimônio líquido</span>
+      <span class="hero-label">Patrimônio em contas</span>
       <strong
         class="hero-figure"
         class:amount-negative={dashboard.net_worth_cents < 0}
       >
         {formatCents(dashboard.net_worth_cents)}
       </strong>
-      <span class="hero-note">ativos − passivos</span>
+      <span class="hero-note">ativos − passivos, sem cofrinhos</span>
     </div>
 
     <dl class="hero-stats">
@@ -182,6 +188,16 @@
       <div class="hero-stat">
         <dt>Passivos</dt>
         <dd class="mono">{formatCents(dashboard.liabilities_cents)}</dd>
+      </div>
+      <div class="hero-stat">
+        <dt>Cofrinhos</dt>
+        <dd class="mono">{formatCents(dashboard.savings_cents)}</dd>
+      </div>
+      <div class="hero-stat">
+        <dt>Total com cofrinhos</dt>
+        <dd class="mono">
+          {formatCents(dashboard.total_with_savings_cents)}
+        </dd>
       </div>
       <div class="hero-stat">
         <dt>Resultado do mês</dt>
@@ -329,6 +345,62 @@
       </footer>
     </section>
   </div>
+
+  <section class="panel" aria-labelledby="overview-savings-title">
+    <header class="panel-header">
+      <div class="panel-heading">
+        <span class="panel-kicker">Rendimento</span>
+        <h3 class="panel-title" id="overview-savings-title">Cofrinhos</h3>
+      </div>
+      <a class="text-link" href="#/contas">gerenciar</a>
+    </header>
+
+    {#if savingsAccounts.length === 0}
+      <div class="empty-panel">
+        <p>Nenhum cofrinho ativo.</p>
+        <a class="button" href="#/contas">Criar cofrinho</a>
+      </div>
+    {:else}
+      <div class="table-wrap">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th scope="col">Cofrinho</th>
+              <th scope="col">Modalidade</th>
+              <th scope="col" class="align-right">Saldo</th>
+            </tr>
+          </thead>
+          <tbody>
+            {#each savingsAccounts as account (account.id)}
+              <tr>
+                <td>
+                  <a class="text-link" href="#/cofrinhos/{account.id}">
+                    {account.name}
+                  </a>
+                </td>
+                <td>
+                  {account.yield_mode === "business"
+                    ? "Dias úteis"
+                    : "Todos os dias"}
+                  · {account.cdi_percent_bps !== null
+                    ? `${account.cdi_percent_bps / 100}% do CDI`
+                    : "—"}
+                </td>
+                <td class="mono align-right">{formatCents(account.balance_cents)}</td>
+              </tr>
+            {/each}
+          </tbody>
+        </table>
+      </div>
+    {/if}
+
+    <footer class="panel-footer">
+      <div class="panel-footnote">
+        <span class="mono">fora do fluxo de caixa</span>
+        <span>Aplicações e resgates são transferências; rendimentos entram no total com cofrinhos.</span>
+      </div>
+    </footer>
+  </section>
 
   <div class="overview-grid">
     <section class="panel" aria-labelledby="overview-month-title">

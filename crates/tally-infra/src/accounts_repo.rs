@@ -7,7 +7,9 @@ use tally_app::error::AppError;
 use crate::db::{Database, map_sqlite_error};
 
 const SELECT_ACCOUNT: &str = "
-    SELECT a.id, a.name, a.type, a.credit_limit_cents, a.archived_at, a.created_at,
+    SELECT a.id, a.name, a.type, a.credit_limit_cents,
+           a.is_savings, a.yield_mode, a.cdi_percent_bps,
+           a.archived_at, a.created_at,
            COALESCE(b.balance_cents, 0) AS balance_cents
     FROM accounts a
     LEFT JOIN (
@@ -55,9 +57,10 @@ impl AccountsRepository for SqliteAccountsRepository {
                     .execute(
                         "INSERT INTO accounts (
                             id, name, class, type, is_system, credit_limit_cents,
+                            is_savings, yield_mode, cdi_percent_bps,
                             archived_at, created_at, updated_at
                          ) VALUES (
-                            ?1, ?2, ?3, ?4, 0, ?5, NULL,
+                            ?1, ?2, ?3, ?4, 0, ?5, ?6, ?7, ?8, NULL,
                             strftime('%Y-%m-%dT%H:%M:%fZ', 'now'),
                             strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
                          )",
@@ -67,6 +70,9 @@ impl AccountsRepository for SqliteAccountsRepository {
                             account.account_type.class(),
                             account.account_type.as_str(),
                             account.credit_limit_cents,
+                            i64::from(account.savings.is_some()),
+                            account.savings.map(|config| config.mode.as_str()),
+                            account.savings.map(|config| config.cdi_percent_bps),
                         ],
                     )
                     .map_err(map_sqlite_error)?;
@@ -287,8 +293,11 @@ fn map_account_row(row: &Row<'_>) -> rusqlite::Result<AccountDto> {
         name: row.get(1)?,
         account_type: row.get(2)?,
         credit_limit_cents: row.get(3)?,
-        archived_at: row.get(4)?,
-        created_at: row.get(5)?,
-        balance_cents: row.get(6)?,
+        is_savings: row.get::<_, i64>(4)? == 1,
+        yield_mode: row.get(5)?,
+        cdi_percent_bps: row.get(6)?,
+        archived_at: row.get(7)?,
+        created_at: row.get(8)?,
+        balance_cents: row.get(9)?,
     })
 }

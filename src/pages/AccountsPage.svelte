@@ -63,8 +63,16 @@
 
   const accounts = $derived(accountsQuery.data ?? []);
   const activeAccounts = $derived(accounts.filter((account) => !account.archived_at));
-  const totalCents = $derived(
-    activeAccounts.reduce((total, account) => total + account.balance_cents, 0),
+  const activeRegular = $derived(
+    activeAccounts.filter((account) => !account.is_savings),
+  );
+  const savingsAccounts = $derived(accounts.filter((account) => account.is_savings));
+  const accountsCents = $derived(
+    activeRegular.reduce((total, account) => total + account.balance_cents, 0),
+  );
+  // Arquivados continuam aqui: o saldo do cofrinho não desaparece.
+  const savingsCents = $derived(
+    savingsAccounts.reduce((total, account) => total + account.balance_cents, 0),
   );
   const queryError = $derived(
     accountsQuery.error ? normalizeError(accountsQuery.error) : null,
@@ -72,6 +80,15 @@
   const saveError = $derived(
     saveMutation.error ? normalizeError(saveMutation.error).message : null,
   );
+
+  function accountHref(account: AccountDto): string {
+    if (account.is_savings) {
+      return `#/cofrinhos/${account.id}`;
+    }
+    return account.account_type === "credit_card"
+      ? `#/cartoes/${account.id}`
+      : `#/contas/${account.id}`;
+  }
 
   function openNew(): void {
     editing = null;
@@ -111,6 +128,9 @@
       account_type: request.accountType,
       opening_balance_cents: request.openingBalanceCents,
       credit_limit_cents: request.creditLimitCents,
+      is_savings: request.isSavings,
+      yield_mode: request.yieldMode ?? undefined,
+      cdi_percent: request.cdiPercent ?? undefined,
     });
   }
 
@@ -165,18 +185,22 @@
 
 <section class="summary-strip" aria-label="Resumo das contas ativas">
   <div>
-    <span class="data-label">Saldo das contas</span>
-    <strong class="summary-value">{formatCents(totalCents)}</strong>
+    <span class="data-label">Patrimônio em contas</span>
+    <strong class="summary-value">{formatCents(accountsCents)}</strong>
+  </div>
+  <div>
+    <span class="data-label">Cofrinhos</span>
+    <strong class="summary-value">{formatCents(savingsCents)}</strong>
+  </div>
+  <div>
+    <span class="data-label">Patrimônio total com cofrinhos</span>
+    <strong class="summary-value">
+      {formatCents(accountsCents + savingsCents)}
+    </strong>
   </div>
   <div>
     <span class="data-label">Contas e cartões ativos</span>
-    <strong class="summary-value">{activeAccounts.length}</strong>
-  </div>
-  <div class="summary-note">
-    <span class="mono">caixa e cartões</span>
-    <span>
-      O patrimônio líquido do dashboard soma também “Despesa a reconhecer”.
-    </span>
+    <strong class="summary-value">{activeRegular.length}</strong>
   </div>
 </section>
 
@@ -245,16 +269,15 @@
           {#each accounts as account (account.id)}
             <tr class:row-muted={Boolean(account.archived_at)}>
               <td>
-                <a
-                  class="text-link"
-                  href={account.account_type === "credit_card"
-                    ? `#/cartoes/${account.id}`
-                    : `#/contas/${account.id}`}
-                >
+                <a class="text-link" href={accountHref(account)}>
                   {account.name}
                 </a>
               </td>
-              <td>{accountTypeLabel(account.account_type)}</td>
+              <td>
+                {account.is_savings
+                  ? "Cofrinho"
+                  : accountTypeLabel(account.account_type)}
+              </td>
               <td>
                 {#if account.archived_at}
                   <span class="tag tag--archived">Arquivada</span>
@@ -270,13 +293,12 @@
               </td>
               <td class="align-right">
                 <div class="row-actions">
-                  <a
-                    class="button button--small"
-                    href={account.account_type === "credit_card"
-                      ? `#/cartoes/${account.id}`
-                      : `#/contas/${account.id}`}
-                  >
-                    {account.account_type === "credit_card" ? "Cartão" : "Extrato"}
+                  <a class="button button--small" href={accountHref(account)}>
+                    {account.is_savings
+                      ? "Cofrinho"
+                      : account.account_type === "credit_card"
+                        ? "Cartão"
+                        : "Extrato"}
                   </a>
                   <button
                     type="button"

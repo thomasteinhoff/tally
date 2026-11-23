@@ -18,6 +18,7 @@ import type {
   CreateCategoryInput,
   CreateExpenseInput,
   CreateIncomeInput,
+  CreateSavingsYieldInput,
   CreateTransferInput,
   CsvExportDto,
   DashboardDto,
@@ -32,6 +33,9 @@ import type {
   PeriodSpendingReportDto,
   ReportFilter,
   RestoreResultDto,
+  ReverseSavingsYieldInput,
+  SavingsOverviewDto,
+  SavingsYieldDto,
   SettingsDto,
   UpdateInstallmentPlanInput,
   UpdateMovementInput,
@@ -75,6 +79,24 @@ export function setAccountArchived(
 
 export function deleteAccount(id: string): Promise<void> {
   return invoke<void>("delete_account", { id });
+}
+
+export function getSavingsOverview(
+  accountId: string,
+): Promise<SavingsOverviewDto> {
+  return invoke<SavingsOverviewDto>("get_savings_overview", { accountId });
+}
+
+export function createSavingsYield(
+  input: CreateSavingsYieldInput,
+): Promise<SavingsYieldDto> {
+  return invoke<SavingsYieldDto>("create_savings_yield", { input });
+}
+
+export function reverseSavingsYield(
+  input: ReverseSavingsYieldInput,
+): Promise<SavingsYieldDto> {
+  return invoke<SavingsYieldDto>("reverse_savings_yield", { input });
 }
 
 export function listCategories(

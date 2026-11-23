@@ -40,6 +40,13 @@ pub struct AccountDto {
     pub credit_limit_cents: Option<i64>,
     #[ts(type = "number")]
     pub balance_cents: i64,
+    /// Cofrinhos ficam fora do patrimônio em contas e aparecem em indicador próprio.
+    pub is_savings: bool,
+    /// `calendar` (dias corridos) ou `business` (dias úteis); só em cofrinhos.
+    pub yield_mode: Option<String>,
+    /// Percentual contratado do CDI em pontos-base (11_500 = 115%).
+    #[ts(type = "number | null")]
+    pub cdi_percent_bps: Option<i64>,
     pub archived_at: Option<String>,
     pub created_at: String,
 }
@@ -53,6 +60,66 @@ pub struct CreateAccountInput {
     pub opening_balance_cents: i64,
     #[ts(type = "number | null")]
     pub credit_limit_cents: Option<i64>,
+    #[serde(default)]
+    #[ts(optional)]
+    pub is_savings: Option<bool>,
+    #[serde(default)]
+    #[ts(optional)]
+    pub yield_mode: Option<String>,
+    /// Percentual contratado (ex.: 115 = 115% do CDI). Ignorado se não for cofrinho.
+    #[serde(default)]
+    #[ts(optional)]
+    pub cdi_percent: Option<f64>,
+}
+
+/// Snapshot de um rendimento. Guarda todos os parâmetros do cálculo original.
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[ts(export, export_to = "../../../src/lib/api/bindings/")]
+pub struct SavingsYieldDto {
+    pub id: String,
+    pub account_id: String,
+    pub as_of: String,
+    /// `calendar` ou `business`, copiado da configuração no momento do cálculo.
+    pub mode: String,
+    #[ts(type = "number")]
+    pub cdi_annual_bps: i64,
+    #[ts(type = "number")]
+    pub contracted_percent_bps: i64,
+    pub daily_rate: f64,
+    #[ts(type = "number")]
+    pub days: i64,
+    #[ts(type = "number")]
+    pub base_cents: i64,
+    #[ts(type = "number")]
+    pub yield_cents: i64,
+    pub status: String,
+    pub entry_id: String,
+    pub reversal_entry_id: Option<String>,
+    pub created_at: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[ts(export, export_to = "../../../src/lib/api/bindings/")]
+pub struct CreateSavingsYieldInput {
+    pub account_id: String,
+    /// Data do rendimento; a base é o saldo no início deste dia.
+    pub as_of: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[ts(export, export_to = "../../../src/lib/api/bindings/")]
+pub struct ReverseSavingsYieldInput {
+    pub yield_id: String,
+    /// Data do estorno, que gera o lançamento compensatório.
+    pub as_of: String,
+}
+
+/// Histórico completo de rendimentos e estornos da tela do cofrinho.
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[ts(export, export_to = "../../../src/lib/api/bindings/")]
+pub struct SavingsOverviewDto {
+    pub account: AccountDto,
+    pub yields: Vec<SavingsYieldDto>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
@@ -512,12 +579,18 @@ pub struct NetWorthPointDto {
     pub month: String,
     /// Último dia do mês do ponto.
     pub as_of: String,
+    /// Patrimônio em contas, sem cofrinhos.
     #[ts(type = "number")]
     pub net_worth_cents: i64,
     #[ts(type = "number")]
     pub assets_cents: i64,
     #[ts(type = "number")]
     pub liabilities_cents: i64,
+    /// Saldo dos cofrinhos, inclusive arquivados com saldo.
+    #[ts(type = "number")]
+    pub savings_cents: i64,
+    #[ts(type = "number")]
+    pub total_with_savings_cents: i64,
 }
 
 /// Série histórica do patrimônio líquido; não altera o patrimônio atual.
@@ -553,6 +626,11 @@ pub struct NetWorthReportDto {
     pub net_worth_cents: i64,
     #[ts(type = "number")]
     pub deferred_expense_cents: i64,
+    /// Cofrinhos ficam de fora de `assets_cents` e de `accounts`.
+    #[ts(type = "number")]
+    pub savings_cents: i64,
+    #[ts(type = "number")]
+    pub total_with_savings_cents: i64,
     pub accounts: Vec<NetWorthAccountDto>,
 }
 
@@ -607,12 +685,17 @@ pub struct DashboardDto {
     pub as_of: String,
     pub month_from: String,
     pub month_to: String,
+    /// Patrimônio em contas, sem cofrinhos.
     #[ts(type = "number")]
     pub net_worth_cents: i64,
     #[ts(type = "number")]
     pub assets_cents: i64,
     #[ts(type = "number")]
     pub liabilities_cents: i64,
+    #[ts(type = "number")]
+    pub savings_cents: i64,
+    #[ts(type = "number")]
+    pub total_with_savings_cents: i64,
     #[ts(type = "number")]
     pub month_income_cents: i64,
     #[ts(type = "number")]

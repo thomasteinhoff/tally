@@ -6,6 +6,7 @@ pub mod data;
 pub mod db;
 pub mod movements_repo;
 pub mod reports_repo;
+pub mod savings_repo;
 
 pub use accounts_repo::SqliteAccountsRepository;
 pub use bootstrap_repo::SqliteBootstrapRepository;
@@ -15,3 +16,4 @@ pub use data::DataTools;
 pub use db::Database;
 pub use movements_repo::SqliteMovementsRepository;
 pub use reports_repo::SqliteReportsRepository;
+pub use savings_repo::SqliteSavingsRepository;

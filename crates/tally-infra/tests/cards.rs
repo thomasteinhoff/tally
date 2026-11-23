@@ -41,6 +41,9 @@ async fn account(fixture: &Fixture, name: &str, opening: i64) -> String {
             account_type: "bank".to_owned(),
             opening_balance_cents: opening,
             credit_limit_cents: None,
+            is_savings: None,
+            yield_mode: None,
+            cdi_percent: None,
         })
         .await
         .expect("account should be created")
@@ -55,6 +58,9 @@ async fn card(fixture: &Fixture, name: &str, opening_debt: i64, limit: Option<i6
             account_type: "credit_card".to_owned(),
             opening_balance_cents: opening_debt,
             credit_limit_cents: limit,
+            is_savings: None,
+            yield_mode: None,
+            cdi_percent: None,
         })
         .await
         .expect("card should be created")

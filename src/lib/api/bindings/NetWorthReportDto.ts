@@ -5,4 +5,8 @@ import type { NetWorthAccountDto } from "./NetWorthAccountDto";
  * Patrimônio em uma data. `assets_cents` inclui a conta interna
  * "Despesa a reconhecer", exposta separadamente em `deferred_expense_cents`.
  */
-export type NetWorthReportDto = { as_of: string, assets_cents: number, liabilities_cents: number, net_worth_cents: number, deferred_expense_cents: number, accounts: Array<NetWorthAccountDto>, };
+export type NetWorthReportDto = { as_of: string, assets_cents: number, liabilities_cents: number, net_worth_cents: number, deferred_expense_cents: number, 
+/**
+ * Cofrinhos ficam de fora de `assets_cents` e de `accounts`.
+ */
+savings_cents: number, total_with_savings_cents: number, accounts: Array<NetWorthAccountDto>, };

@@ -192,6 +192,8 @@ impl<R: ReportsRepository> ReportsService<R> {
             net_worth_cents: net_worth.net_worth_cents,
             assets_cents: net_worth.assets_cents,
             liabilities_cents: net_worth.liabilities_cents,
+            savings_cents: net_worth.savings_cents,
+            total_with_savings_cents: net_worth.total_with_savings_cents,
             month_income_cents: income.total_cents,
             month_expense_cents: spending.total_cents,
             month_result_cents: income.total_cents - spending.total_cents,

@@ -744,12 +744,12 @@ fn delete_payment_rows(transaction: &Transaction<'_>, payment_id: &str) -> Resul
     Ok(())
 }
 
-type AccountRow = (String, Option<String>, i64, Option<String>);
+type AccountRow = (String, Option<String>, i64, Option<String>, i64);
 
 fn fetch_account(connection: &Connection, id: &str) -> Result<AccountRow, AppError> {
     connection
         .query_row(
-            "SELECT class, type, is_system, archived_at FROM accounts WHERE id = ?1",
+            "SELECT class, type, is_system, archived_at, is_savings FROM accounts WHERE id = ?1",
             [id],
             |row| {
                 Ok((
@@ -757,6 +757,7 @@ fn fetch_account(connection: &Connection, id: &str) -> Result<AccountRow, AppErr
                     row.get::<_, Option<String>>(1)?,
                     row.get::<_, i64>(2)?,
                     row.get::<_, Option<String>>(3)?,
+                    row.get::<_, i64>(4)?,
                 ))
             },
         )
@@ -766,7 +767,7 @@ fn fetch_account(connection: &Connection, id: &str) -> Result<AccountRow, AppErr
 }
 
 fn ensure_card(connection: &Connection, id: &str) -> Result<(), AppError> {
-    let (class, account_type, is_system, archived_at) = fetch_account(connection, id)?;
+    let (class, account_type, is_system, archived_at, _) = fetch_account(connection, id)?;
 
     if is_system == 1 {
         return Err(AppError::validation(
@@ -784,11 +785,16 @@ fn ensure_card(connection: &Connection, id: &str) -> Result<(), AppError> {
 }
 
 fn ensure_bank(connection: &Connection, id: &str) -> Result<(), AppError> {
-    let (class, account_type, is_system, archived_at) = fetch_account(connection, id)?;
+    let (class, account_type, is_system, archived_at, is_savings) = fetch_account(connection, id)?;
 
     if is_system == 1 {
         return Err(AppError::validation(
             "contas internas não podem ser usadas diretamente",
+        ));
+    }
+    if is_savings == 1 {
+        return Err(AppError::validation(
+            "cofrinhos não podem pagar faturas de cartão",
         ));
     }
     if class != "asset" || account_type.is_none() {

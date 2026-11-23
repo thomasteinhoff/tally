@@ -4,6 +4,7 @@ export type Route =
   | { name: "movements" }
   | { name: "accounts" }
   | { name: "statement"; accountId: string }
+  | { name: "savings"; accountId: string }
   | { name: "cards" }
   | { name: "card"; cardId: string }
   | { name: "installments" }
@@ -51,6 +52,10 @@ export function parseRoute(hash: string): Route {
     return { name: "statement", accountId: segments[1] };
   }
 
+  if (segments.length === 2 && segments[0] === "cofrinhos") {
+    return { name: "savings", accountId: segments[1] };
+  }
+
   if (segments.length === 2 && segments[0] === "cartoes") {
     return { name: "card", cardId: segments[1] };
   }
@@ -74,6 +79,8 @@ export function routeHref(route: Route): string {
       return "#/contas";
     case "statement":
       return `#/contas/${encodeURIComponent(route.accountId)}`;
+    case "savings":
+      return `#/cofrinhos/${encodeURIComponent(route.accountId)}`;
     case "cards":
       return "#/cartoes";
     case "card":
@@ -139,6 +146,7 @@ export function isSectionActive(route: Route, section: NavSection): boolean {
     return (
       route.name === "accounts" ||
       route.name === "statement" ||
+      route.name === "savings" ||
       route.name === "cards" ||
       route.name === "card"
     );

@@ -67,6 +67,9 @@ async fn seed_expense(fixture: &Fixture) {
             account_type: "bank".to_owned(),
             opening_balance_cents: 0,
             credit_limit_cents: None,
+            is_savings: None,
+            yield_mode: None,
+            cdi_percent: None,
         })
         .await
         .expect("account")
@@ -343,7 +346,7 @@ async fn restores_a_legacy_backup_and_applies_pending_migrations() {
         .call(|connection| connection.query_row("PRAGMA user_version", [], |row| row.get(0)))
         .await
         .expect("version");
-    assert_eq!(version, 3);
+    assert_eq!(version, 5);
 
     let has_column: i64 = fixture
         .db

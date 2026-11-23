@@ -26,6 +26,7 @@
   import InstallmentsPage from "./pages/InstallmentsPage.svelte";
   import MovementsPage from "./pages/MovementsPage.svelte";
   import OverviewPage from "./pages/OverviewPage.svelte";
+  import SavingsDetailPage from "./pages/SavingsDetailPage.svelte";
   import SettingsPage from "./pages/SettingsPage.svelte";
   import StatementPage from "./pages/StatementPage.svelte";
 
@@ -69,9 +70,11 @@
             ? "Contas"
             : route.name === "statement"
               ? "Extrato"
-              : route.name === "cards"
-                ? "Cartões"
-                : route.name === "card"
+              : route.name === "savings"
+                ? "Cofrinho"
+                : route.name === "cards"
+                  ? "Cartões"
+                  : route.name === "card"
                   ? "Cartão"
                   : route.name === "installments"
                     ? "Parcelamentos"
@@ -239,6 +242,8 @@
             <AccountsPage />
           {:else if route.name === "statement"}
             <StatementPage accountId={route.accountId} />
+          {:else if route.name === "savings"}
+            <SavingsDetailPage accountId={route.accountId} />
           {:else if route.name === "cards"}
             <CardsPage />
           {:else if route.name === "card"}

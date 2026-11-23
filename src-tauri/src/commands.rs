@@ -3,16 +3,17 @@ use tally_app::{
     BootstrapService, CardPaymentDto, CardSummaryDto, CardsService, CashFlowReportDto,
     CategoriesService, CategoryDto, CategoryReportDto, CommitmentsReportDto, CreateAccountInput,
     CreateAdjustmentInput, CreateCardPaymentInput, CreateCardPurchaseInput, CreateCategoryInput,
-    CreateExpenseInput, CreateIncomeInput, CreateTransferInput, CsvExportDto, DashboardDto,
-    ExpenseTrendDto, ExportCsvInput, InstallmentPlanDto, IntegrityReportDto, MovementDto,
-    MovementFilter, MovementsService, NetWorthHistoryDto, NetWorthReportDto,
-    PeriodSpendingReportDto, ReportFilter, ReportsService, RestoreResultDto, SettingsDto,
+    CreateExpenseInput, CreateIncomeInput, CreateSavingsYieldInput, CreateTransferInput,
+    CsvExportDto, DashboardDto, ExpenseTrendDto, ExportCsvInput, InstallmentPlanDto,
+    IntegrityReportDto, MovementDto, MovementFilter, MovementsService, NetWorthHistoryDto,
+    NetWorthReportDto, PeriodSpendingReportDto, ReportFilter, ReportsService, RestoreResultDto,
+    ReverseSavingsYieldInput, SavingsOverviewDto, SavingsService, SavingsYieldDto, SettingsDto,
     UpdateInstallmentPlanInput, UpdateMovementInput, UpdateSettingsInput,
 };
 use tally_infra::{
     DataTools, Database, SqliteAccountsRepository, SqliteBootstrapRepository,
     SqliteCardsRepository, SqliteCategoriesRepository, SqliteMovementsRepository,
-    SqliteReportsRepository,
+    SqliteReportsRepository, SqliteSavingsRepository,
 };
 use tauri::State;
 
@@ -60,6 +61,11 @@ fn cards_service(state: &AppState) -> Result<CardsService<SqliteCardsRepository>
 fn reports_service(state: &AppState) -> Result<ReportsService<SqliteReportsRepository>, AppError> {
     let db = database(state)?;
     Ok(ReportsService::new(SqliteReportsRepository::new(db)))
+}
+
+fn savings_service(state: &AppState) -> Result<SavingsService<SqliteSavingsRepository>, AppError> {
+    let db = database(state)?;
+    Ok(SavingsService::new(SqliteSavingsRepository::new(db)))
 }
 
 fn data_tools(state: &AppState) -> Result<DataTools, AppError> {
@@ -154,6 +160,30 @@ pub async fn set_account_archived(
 #[tauri::command]
 pub async fn delete_account(state: State<'_, AppState>, id: String) -> Result<(), AppError> {
     accounts_service(state.inner())?.delete(&id).await
+}
+
+#[tauri::command]
+pub async fn get_savings_overview(
+    state: State<'_, AppState>,
+    account_id: String,
+) -> Result<SavingsOverviewDto, AppError> {
+    savings_service(state.inner())?.overview(&account_id).await
+}
+
+#[tauri::command]
+pub async fn create_savings_yield(
+    state: State<'_, AppState>,
+    input: CreateSavingsYieldInput,
+) -> Result<SavingsYieldDto, AppError> {
+    savings_service(state.inner())?.create_yield(input).await
+}
+
+#[tauri::command]
+pub async fn reverse_savings_yield(
+    state: State<'_, AppState>,
+    input: ReverseSavingsYieldInput,
+) -> Result<SavingsYieldDto, AppError> {
+    savings_service(state.inner())?.reverse_yield(input).await
 }
 
 #[tauri::command]

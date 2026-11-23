@@ -7,6 +7,7 @@ use uuid::Uuid;
 
 use crate::dto::{AccountDto, CreateAccountInput};
 use crate::error::AppError;
+use crate::savings::{SavingsConfig, normalize_savings_config};
 
 /// Conta interna de patrimônio criada pela migration inicial.
 const EQUITY_ACCOUNT_ID: &str = "00000000-0000-7000-8000-000000000001";
@@ -29,6 +30,7 @@ pub struct NewAccount {
     pub name: String,
     pub account_type: AccountType,
     pub credit_limit_cents: Option<i64>,
+    pub savings: Option<SavingsConfig>,
     pub opening_entry: Option<OpeningBalance>,
 }
 
@@ -61,10 +63,23 @@ impl<R: AccountsRepository> AccountsService<R> {
 
     pub async fn create(&self, input: CreateAccountInput) -> Result<AccountDto, AppError> {
         let name = normalize_name(&input.name)?;
-        let account_type = AccountType::parse(&input.account_type).ok_or_else(|| {
-            AppError::validation(format!("tipo de conta inválido: {}", input.account_type))
-        })?;
+        let is_savings = input.is_savings.unwrap_or(false);
+        let savings =
+            normalize_savings_config(is_savings, input.yield_mode.as_deref(), input.cdi_percent)?;
+        let account_type = if is_savings {
+            // Cofrinho é sempre um ativo do tipo `savings`, com configuração própria.
+            AccountType::Savings
+        } else {
+            AccountType::parse(&input.account_type).ok_or_else(|| {
+                AppError::validation(format!("tipo de conta inválido: {}", input.account_type))
+            })?
+        };
         let cents = validate_cents(input.opening_balance_cents)?;
+        if is_savings && cents < 0 {
+            return Err(AppError::validation(
+                "o saldo inicial do cofrinho não pode ser negativo",
+            ));
+        }
         if account_type.is_credit_card() && cents < 0 {
             return Err(AppError::validation(
                 "a dívida inicial do cartão não pode ser negativa",
@@ -116,6 +131,7 @@ impl<R: AccountsRepository> AccountsService<R> {
                 name,
                 account_type,
                 credit_limit_cents,
+                savings,
                 opening_entry,
             })
             .await
@@ -197,7 +213,7 @@ fn normalize_credit_limit(
 
 #[cfg(test)]
 mod tests {
-    use super::{AccountsService, EQUITY_ACCOUNT_ID, NewAccount};
+    use super::{AccountType, AccountsService, EQUITY_ACCOUNT_ID, NewAccount};
     use crate::accounts::AccountsRepository;
     use crate::dto::{AccountDto, CreateAccountInput};
     use crate::error::AppError;
@@ -217,12 +233,16 @@ mod tests {
 
         async fn create(&self, account: NewAccount) -> Result<AccountDto, AppError> {
             *self.created.lock().expect("lock") = Some(account.clone());
+            let savings = account.savings;
             Ok(AccountDto {
                 id: account.id,
                 name: account.name,
                 account_type: account.account_type.as_str().to_owned(),
                 credit_limit_cents: account.credit_limit_cents,
                 balance_cents: 0,
+                is_savings: savings.is_some(),
+                yield_mode: savings.map(|config| config.mode.as_str().to_owned()),
+                cdi_percent_bps: savings.map(|config| config.cdi_percent_bps),
                 archived_at: None,
                 created_at: "2026-10-31T12:00:00Z".to_owned(),
             })
@@ -252,6 +272,9 @@ mod tests {
             account_type: account_type.to_owned(),
             opening_balance_cents,
             credit_limit_cents: None,
+            is_savings: None,
+            yield_mode: None,
+            cdi_percent: None,
         }
     }
 
@@ -294,6 +317,9 @@ mod tests {
                 account_type: "credit_card".to_owned(),
                 opening_balance_cents: 20_000,
                 credit_limit_cents: Some(500_000),
+                is_savings: None,
+                yield_mode: None,
+                cdi_percent: None,
             })
             .await
             .expect("create should work");
@@ -355,13 +381,79 @@ mod tests {
         assert!(matches!(
             service
                 .create(CreateAccountInput {
-                    name: "Banco".to_owned(),
-                    account_type: "bank".to_owned(),
-                    opening_balance_cents: 0,
-                    credit_limit_cents: Some(100),
+                    name: "Cofrinho".to_owned(),
+                    account_type: "savings".to_owned(),
+                    opening_balance_cents: -1_000,
+                    credit_limit_cents: None,
+                    is_savings: Some(true),
+                    yield_mode: Some("calendar".to_owned()),
+                    cdi_percent: Some(100.0),
                 })
                 .await,
             Err(AppError::Validation { .. })
         ));
+        assert!(matches!(
+            service
+                .create(CreateAccountInput {
+                    name: "Banco".to_owned(),
+                    account_type: "bank".to_owned(),
+                    opening_balance_cents: 0,
+                    credit_limit_cents: Some(100),
+                    is_savings: None,
+                    yield_mode: None,
+                    cdi_percent: None,
+                })
+                .await,
+            Err(AppError::Validation { .. })
+        ));
+    }
+
+    #[tokio::test]
+    async fn creates_savings_with_config_and_opening_balance() {
+        let repo = FakeRepository::default();
+        let service = AccountsService::new(repo.clone());
+
+        let account = service
+            .create(CreateAccountInput {
+                name: "Cofrinho".to_owned(),
+                account_type: "bank".to_owned(),
+                opening_balance_cents: 0,
+                credit_limit_cents: None,
+                is_savings: Some(true),
+                yield_mode: Some("business".to_owned()),
+                cdi_percent: Some(115.0),
+            })
+            .await
+            .expect("create should work");
+
+        assert!(account.is_savings);
+        assert_eq!(account.yield_mode.as_deref(), Some("business"));
+        assert_eq!(account.cdi_percent_bps, Some(11_500));
+        let created = repo.created.lock().expect("lock").clone().expect("created");
+        assert_eq!(created.account_type, AccountType::Savings);
+        assert!(created.opening_entry.is_none());
+
+        let with_opening = service
+            .create(CreateAccountInput {
+                name: "Cofrinho".to_owned(),
+                account_type: "savings".to_owned(),
+                opening_balance_cents: 1_000,
+                credit_limit_cents: None,
+                is_savings: Some(true),
+                yield_mode: Some("calendar".to_owned()),
+                cdi_percent: Some(100.0),
+            })
+            .await
+            .expect("savings opening balance should work");
+        assert!(with_opening.is_savings);
+
+        let created = repo.created.lock().expect("lock").clone().expect("created");
+        assert_eq!(created.account_type, AccountType::Savings);
+        let entry = created.opening_entry.expect("opening entry");
+        assert_eq!(entry.postings[0].account_id, created.id);
+        assert_eq!(entry.postings[0].amount.cents(), 1_000);
+        assert_eq!(entry.postings[1].account_id, EQUITY_ACCOUNT_ID);
+        assert_eq!(entry.postings[1].amount.cents(), -1_000);
+        assert!(validate_postings(&entry.postings).is_ok());
     }
 }

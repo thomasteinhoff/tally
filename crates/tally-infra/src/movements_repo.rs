@@ -10,7 +10,9 @@ use tally_domain::movement::MovementKind;
 use crate::db::{Database, map_sqlite_error};
 
 const SELECT_ACCOUNT: &str = "
-    SELECT a.id, a.name, a.type, a.credit_limit_cents, a.archived_at, a.created_at,
+    SELECT a.id, a.name, a.type, a.credit_limit_cents,
+           a.is_savings, a.yield_mode, a.cdi_percent_bps,
+           a.archived_at, a.created_at,
            COALESCE((
                SELECT SUM(p.amount_cents)
                FROM postings p
@@ -46,6 +48,10 @@ const SELECT_MOVEMENT: &str = "
     WHERE e.posted_at IS NOT NULL AND e.kind <> 'opening_balance'
       AND NOT EXISTS (
           SELECT 1 FROM installments i WHERE i.recognition_entry_id = e.id
+      )
+      AND NOT EXISTS (
+          SELECT 1 FROM savings_yields sy
+          WHERE sy.entry_id = e.id OR sy.reversal_entry_id = e.id
       )
 ";
 
@@ -113,6 +119,8 @@ impl MovementsRepository for SqliteMovementsRepository {
                     .map_err(map_sqlite_error)?
                     .ok_or_else(|| AppError::not_found("movimentação não encontrada"))?;
 
+                ensure_not_savings_yield(transaction, &id, "editados")?;
+
                 let existing_kind = MovementKind::parse(&existing.0).ok_or_else(|| {
                     AppError::conflict("esta entrada interna não pode ser editada")
                 })?;
@@ -163,6 +171,8 @@ impl MovementsRepository for SqliteMovementsRepository {
                     .optional()
                     .map_err(map_sqlite_error)?
                     .ok_or_else(|| AppError::not_found("movimentação não encontrada"))?;
+
+                ensure_not_savings_yield(transaction, &id, "excluídos")?;
 
                 MovementKind::parse(&kind).ok_or_else(|| {
                     AppError::conflict("esta entrada interna não pode ser excluída")
@@ -343,6 +353,11 @@ impl MovementsRepository for SqliteMovementsRepository {
     }
 }
 
+#[derive(Clone, Copy)]
+struct AccountFlags {
+    is_savings: bool,
+}
+
 fn validate_references(
     transaction: &rusqlite::Transaction<'_>,
     movement: &NewMovement,
@@ -352,14 +367,17 @@ fn validate_references(
 ) -> Result<(), AppError> {
     let allow_primary = update
         && existing_accounts.is_some_and(|(primary, _)| primary == movement.primary_account_id);
-    ensure_account(transaction, &movement.primary_account_id, allow_primary)?;
+    let primary = ensure_account(transaction, &movement.primary_account_id, allow_primary)?;
 
-    if let Some(counterparty) = &movement.counterparty_account_id {
-        let allow = update
-            && existing_accounts
-                .is_some_and(|(_, existing)| existing == Some(counterparty.as_str()));
-        ensure_account(transaction, counterparty, allow)?;
-    }
+    let counterparty = if let Some(id) = &movement.counterparty_account_id {
+        let allow =
+            update && existing_accounts.is_some_and(|(_, existing)| existing == Some(id.as_str()));
+        Some(ensure_account(transaction, id, allow)?)
+    } else {
+        None
+    };
+
+    ensure_savings_operation(transaction, movement, primary, counterparty)?;
 
     if let Some(category_id) = &movement.category_id {
         let allow = update && existing_category.is_some_and(|existing| existing == category_id);
@@ -369,16 +387,104 @@ fn validate_references(
     Ok(())
 }
 
+/// Uma fonte de verdade para as operações de cofrinho: só transferência com
+/// conta convencional, sem transferência entre cofrinhos e sem resgate que
+/// deixe saldo negativo. A migration repete só as invariantes estruturais.
+fn ensure_savings_operation(
+    transaction: &rusqlite::Transaction<'_>,
+    movement: &NewMovement,
+    primary: AccountFlags,
+    counterparty: Option<AccountFlags>,
+) -> Result<(), AppError> {
+    let primary_savings = primary.is_savings;
+    let counterparty_savings = counterparty.is_some_and(|flags| flags.is_savings);
+    if !primary_savings && !counterparty_savings {
+        return Ok(());
+    }
+
+    if movement.kind != MovementKind::Transfer || movement.counterparty_account_id.is_none() {
+        return Err(AppError::validation(
+            "cofrinhos só aceitam transferências com uma conta convencional",
+        ));
+    }
+
+    if primary_savings && counterparty_savings {
+        return Err(AppError::validation(
+            "transferências entre cofrinhos não são permitidas",
+        ));
+    }
+
+    if primary_savings {
+        let debit = movement
+            .postings
+            .iter()
+            .find(|posting| posting.account_id == movement.primary_account_id)
+            .map_or(0, |posting| posting.amount.cents());
+        if debit < 0 && account_balance(transaction, &movement.primary_account_id)? + debit < 0 {
+            return Err(AppError::validation(
+                "saldo insuficiente no cofrinho para o resgate",
+            ));
+        }
+    }
+
+    Ok(())
+}
+
+fn ensure_not_savings_yield(
+    transaction: &rusqlite::Transaction<'_>,
+    id: &str,
+    action: &str,
+) -> Result<(), AppError> {
+    let linked = transaction
+        .query_row(
+            "SELECT EXISTS(
+                SELECT 1 FROM savings_yields
+                WHERE entry_id = ?1 OR reversal_entry_id = ?1
+             )",
+            [id],
+            |row| row.get::<_, i64>(0),
+        )
+        .map_err(map_sqlite_error)?;
+    if linked == 1 {
+        return Err(AppError::conflict(format!(
+            "rendimentos e estornos de cofrinho não podem ser {action}"
+        )));
+    }
+    Ok(())
+}
+
+fn account_balance(
+    transaction: &rusqlite::Transaction<'_>,
+    account_id: &str,
+) -> Result<i64, AppError> {
+    transaction
+        .query_row(
+            "SELECT COALESCE(SUM(p.amount_cents), 0)
+             FROM postings p
+             JOIN journal_entries e ON e.id = p.entry_id
+             WHERE p.account_id = ?1 AND e.posted_at IS NOT NULL",
+            [account_id],
+            |row| row.get::<_, i64>(0),
+        )
+        .map_err(map_sqlite_error)
+}
+
 fn ensure_account(
     transaction: &rusqlite::Transaction<'_>,
     id: &str,
     allow_archived: bool,
-) -> Result<(), AppError> {
+) -> Result<AccountFlags, AppError> {
     let account = transaction
         .query_row(
-            "SELECT is_system, archived_at FROM accounts WHERE id = ?1",
+            "SELECT is_system, archived_at, is_savings FROM accounts WHERE id = ?1",
             [id],
-            |row| Ok((row.get::<_, i64>(0)?, row.get::<_, Option<String>>(1)?)),
+            |row| {
+                Ok((
+                    row.get::<_, i64>(0)?,
+                    row.get::<_, Option<String>>(1)?,
+                    row.get::<_, i64>(2)?,
+                ))
+            },
         )
         .optional()
         .map_err(map_sqlite_error)?
@@ -394,7 +500,9 @@ fn ensure_account(
         return Err(AppError::validation("a conta está arquivada"));
     }
 
-    Ok(())
+    Ok(AccountFlags {
+        is_savings: account.2 == 1,
+    })
 }
 
 fn ensure_category(
@@ -584,8 +692,11 @@ fn map_account_row(row: &Row<'_>) -> rusqlite::Result<AccountDto> {
         name: row.get(1)?,
         account_type: row.get(2)?,
         credit_limit_cents: row.get(3)?,
-        archived_at: row.get(4)?,
-        created_at: row.get(5)?,
-        balance_cents: row.get(6)?,
+        is_savings: row.get::<_, i64>(4)? == 1,
+        yield_mode: row.get(5)?,
+        cdi_percent_bps: row.get(6)?,
+        archived_at: row.get(7)?,
+        created_at: row.get(8)?,
+        balance_cents: row.get(9)?,
     })
 }

@@ -189,6 +189,7 @@ const accountTypeLabels: Record<string, string> = {
   bank: "Conta bancária",
   cash: "Dinheiro",
   savings: "Poupança",
+  cofrinho: "Cofrinho",
   investment: "Investimento",
   digital_wallet: "Carteira digital",
   other_asset: "Outro ativo",

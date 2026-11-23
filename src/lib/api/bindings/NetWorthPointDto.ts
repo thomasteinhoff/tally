@@ -4,4 +4,12 @@ export type NetWorthPointDto = { month: string,
 /**
  * Último dia do mês do ponto.
  */
-as_of: string, net_worth_cents: number, assets_cents: number, liabilities_cents: number, };
+as_of: string, 
+/**
+ * Patrimônio em contas, sem cofrinhos.
+ */
+net_worth_cents: number, assets_cents: number, liabilities_cents: number, 
+/**
+ * Saldo dos cofrinhos, inclusive arquivados com saldo.
+ */
+savings_cents: number, total_with_savings_cents: number, };
