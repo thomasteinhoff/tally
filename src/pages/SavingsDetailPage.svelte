@@ -150,9 +150,14 @@
     );
   }
 
+  function reversalDate(item: SavingsYieldDto): string {
+    const today = todayIso();
+    return item.as_of > today ? item.as_of : today;
+  }
+
   async function reverseYield(item: SavingsYieldDto): Promise<void> {
     const confirmed = await confirmAction(
-      `Estornar o rendimento de ${formatDate(item.as_of)}? O original fica preservado e um lançamento compensatório entra na data de hoje.`,
+      `Estornar o rendimento de ${formatDate(item.as_of)}? O original fica preservado e um lançamento compensatório entra em ${formatDate(reversalDate(item))}.`,
       "Estornar rendimento",
       "Estornar",
     );
@@ -165,7 +170,7 @@
 
   async function substituteYield(item: SavingsYieldDto): Promise<void> {
     const confirmed = await confirmAction(
-      `Substituir o rendimento de ${formatDate(item.as_of)}? O original é estornado hoje e um novo rendimento é calculado na data original.`,
+      `Substituir o rendimento de ${formatDate(item.as_of)}? O original é estornado em ${formatDate(reversalDate(item))} e um novo rendimento é calculado na data original.`,
       "Substituir rendimento",
       "Substituir",
     );
