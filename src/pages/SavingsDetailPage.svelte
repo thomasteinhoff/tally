@@ -81,10 +81,17 @@
   const yields = $derived(overview?.yields ?? []);
   const history = $derived(historyQuery.data ?? []);
   const cdi = $derived(cdiStatus ?? cdiQuery.data ?? null);
-  const cdiStale = $derived(
-    cdi !== null &&
-      (cdi.rate_count === 0 || cdi.last_error !== null || cdi.last_success_at === null),
-  );
+
+  function cdiIsStale(value: CdiStatusDto | null): boolean {
+    if (!value) return false;
+    if (value.rate_count === 0 || value.last_error !== null || value.last_success_at === null) {
+      return true;
+    }
+    const age = Date.now() - new Date(value.last_success_at).getTime();
+    return !Number.isFinite(age) || age > 24 * 60 * 60 * 1000;
+  }
+
+  const cdiStale = $derived(cdiIsStale(cdi));
   const archived = $derived(Boolean(account?.archived_at));
   const regularAccounts = $derived(
     (accountsQuery.data ?? []).filter(
@@ -273,7 +280,7 @@
         {#if cdi && cdi.last_rate_date}
           Última publicação em {formatDate(cdi.last_rate_date)}.
         {:else}
-          Nenhuma taxa em cache. O rendimento usa apenas taxas locais.
+          Nenhuma taxa em cache. Atualize as taxas antes de gerar rendimentos.
         {/if}
       </p>
       {#if cdiStale}
