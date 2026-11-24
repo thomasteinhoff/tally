@@ -198,6 +198,41 @@ async fn balance(fixture: &Fixture, id: &str) -> i64 {
         .balance_cents
 }
 
+/// Simula um rendimento criado antes do bloqueio de data futura, inclusive sem
+/// a provenância da taxa que passou a ser gravada nas versões seguintes.
+async fn mark_yield_as_legacy_future(fixture: &Fixture, id: &str, as_of: &str) {
+    let id = id.to_owned();
+    let as_of = as_of.to_owned();
+    fixture
+        .db
+        .call(move |connection| {
+            connection.execute(
+                "UPDATE savings_yields
+                 SET as_of = ?1, rate_date = NULL, rate_series = NULL,
+                     cdi_daily_rate = NULL, rate_fetched_at = NULL
+                 WHERE id = ?2",
+                params![as_of, id],
+            )
+        })
+        .await
+        .expect("legacy future yield");
+}
+
+async fn entry_occurred_on(fixture: &Fixture, entry_id: &str) -> String {
+    let entry_id = entry_id.to_owned();
+    fixture
+        .db
+        .call(move |connection| {
+            connection.query_row(
+                "SELECT occurred_on FROM journal_entries WHERE id = ?1",
+                [entry_id],
+                |row| row.get(0),
+            )
+        })
+        .await
+        .expect("entry")
+}
+
 fn movement_filter() -> MovementFilter {
     MovementFilter {
         account_id: None,
@@ -512,7 +547,11 @@ async fn reversal_is_rejected_when_the_yield_was_already_withdrawn() {
             as_of: "2026-11-05".to_owned(),
         })
         .await;
-    assert!(matches!(rejected, Err(AppError::Validation { .. })));
+    let message = match rejected {
+        Err(AppError::Validation { message }) => message,
+        other => panic!("estorno deveria ser rejeitado: {other:?}"),
+    };
+    assert!(message.contains("já foi resgatado"), "{message}");
 
     let postings_after: i64 = fixture
         .db
@@ -1119,6 +1158,146 @@ async fn legacy_yield_snapshots_without_rate_provenance_remain_readable() {
 }
 
 #[tokio::test]
+async fn legacy_future_yield_can_be_reversed_on_its_original_date() {
+    let fixture = fixture().await;
+    let bank = account(&fixture, "Banco", 500_000).await;
+    let pot = savings(&fixture, "Cofrinho", "calendar", 100.0).await;
+    transfer(&fixture, &bank, &pot, 100_000, "2026-11-02").await;
+    let original = yield_at(&fixture, &pot, "2026-11-03").await;
+    let tomorrow = (Local::now().date_naive() + Duration::days(1))
+        .format("%Y-%m-%d")
+        .to_string();
+    mark_yield_as_legacy_future(&fixture, &original.id, &tomorrow).await;
+
+    let today = Local::now().date_naive().format("%Y-%m-%d").to_string();
+    let reversal = fixture
+        .savings
+        .reverse_yield(ReverseSavingsYieldInput {
+            yield_id: original.id.clone(),
+            as_of: today,
+        })
+        .await
+        .expect("estorno de rendimento legado");
+    assert_eq!(reversal.status, "reversed");
+    assert_eq!(reversal.as_of, tomorrow);
+
+    let reversal_entry = reversal
+        .reversal_entry_id
+        .clone()
+        .expect("entry do estorno");
+    assert_eq!(entry_occurred_on(&fixture, &reversal_entry).await, tomorrow);
+    assert_eq!(
+        entry_occurred_on(&fixture, &original.entry_id).await,
+        "2026-11-03"
+    );
+
+    let history = fixture
+        .savings
+        .overview(&pot)
+        .await
+        .expect("overview")
+        .yields;
+    assert_eq!(history.len(), 1);
+    let stored = history
+        .iter()
+        .find(|item| item.id == original.id)
+        .expect("snapshot original");
+    assert_eq!(stored.as_of, tomorrow);
+    assert_eq!(stored.status, "reversed");
+    assert_eq!(
+        stored.reversal_entry_id.as_deref(),
+        Some(reversal_entry.as_str())
+    );
+    assert_eq!(stored.entry_id, original.entry_id);
+    assert_eq!(stored.base_cents, original.base_cents);
+    assert_eq!(stored.yield_cents, original.yield_cents);
+    assert_eq!(stored.daily_rate, original.daily_rate);
+    assert_eq!(stored.rate_date, None);
+    assert_eq!(stored.rate_series, None);
+    assert_eq!(stored.cdi_daily_rate, None);
+    assert_eq!(stored.rate_fetched_at, None);
+    assert_eq!(balance(&fixture, &pot).await, 100_000);
+}
+
+#[tokio::test]
+async fn legacy_future_yield_replacement_is_atomic_and_preserves_history() {
+    let fixture = fixture().await;
+    let bank = account(&fixture, "Banco", 500_000).await;
+    let pot = savings(&fixture, "Cofrinho", "calendar", 115.0).await;
+    transfer(&fixture, &bank, &pot, 100_000, "2026-11-02").await;
+    let original = yield_at(&fixture, &pot, "2026-11-03").await;
+    let balance_before = balance(&fixture, &pot).await;
+    let entries_before: i64 = fixture
+        .db
+        .call(|connection| {
+            connection.query_row("SELECT COUNT(*) FROM journal_entries", [], |row| row.get(0))
+        })
+        .await
+        .expect("entries");
+    let tomorrow = (Local::now().date_naive() + Duration::days(1))
+        .format("%Y-%m-%d")
+        .to_string();
+    mark_yield_as_legacy_future(&fixture, &original.id, &tomorrow).await;
+
+    let replacement = fixture
+        .savings
+        .replace_yield(ReplaceSavingsYieldInput {
+            yield_id: original.id.clone(),
+        })
+        .await
+        .expect("substituição de rendimento legado");
+    assert_ne!(replacement.id, original.id);
+    assert_eq!(replacement.as_of, tomorrow);
+    assert_eq!(replacement.status, "confirmed");
+    assert_eq!(replacement.rate_date.as_deref(), Some("2026-11-19"));
+    assert_eq!(replacement.rate_series.as_deref(), Some("12"));
+    assert_eq!(replacement.cdi_daily_rate, Some(0.00050788));
+    assert!(replacement.rate_fetched_at.is_some());
+    assert_eq!(balance(&fixture, &pot).await, balance_before);
+
+    let entries_after: i64 = fixture
+        .db
+        .call(|connection| {
+            connection.query_row("SELECT COUNT(*) FROM journal_entries", [], |row| row.get(0))
+        })
+        .await
+        .expect("entries");
+    assert_eq!(entries_after, entries_before + 2);
+
+    let history = fixture
+        .savings
+        .overview(&pot)
+        .await
+        .expect("overview")
+        .yields;
+    assert_eq!(history.len(), 2);
+    let old = history
+        .iter()
+        .find(|item| item.id == original.id)
+        .expect("snapshot original");
+    assert_eq!(old.status, "reversed");
+    assert_eq!(old.as_of, tomorrow);
+    assert_eq!(old.yield_cents, original.yield_cents);
+    assert_eq!(old.base_cents, original.base_cents);
+    assert_eq!(old.rate_date, None);
+    assert_eq!(old.rate_series, None);
+    assert_eq!(old.cdi_daily_rate, None);
+    assert_eq!(old.rate_fetched_at, None);
+    let reversal_entry = old.reversal_entry_id.clone().expect("entry do estorno");
+    assert_eq!(entry_occurred_on(&fixture, &reversal_entry).await, tomorrow);
+
+    let new = history
+        .iter()
+        .find(|item| item.id == replacement.id)
+        .expect("snapshot substituto");
+    assert_eq!(new.status, "confirmed");
+    assert_eq!(new.as_of, tomorrow);
+    assert_eq!(new.rate_date.as_deref(), Some("2026-11-19"));
+    assert_eq!(new.rate_series.as_deref(), Some("12"));
+    assert_eq!(new.cdi_daily_rate, Some(0.00050788));
+}
+
+#[tokio::test]
 async fn yield_entries_cannot_be_edited_or_deleted_as_generic_movements() {
     let fixture = fixture().await;
     let bank = account(&fixture, "Banco", 500_000).await;
@@ -1360,7 +1539,7 @@ async fn savings_with_history_requires_archiving_and_keeps_yield_snapshots() {
 }
 
 #[tokio::test]
-async fn future_yield_and_reversal_dates_are_rejected() {
+async fn future_and_invalid_reversal_dates_are_rejected() {
     let fixture = fixture().await;
     let bank = account(&fixture, "Banco", 500_000).await;
     let pot = savings(&fixture, "Cofrinho", "calendar", 100.0).await;
@@ -1377,7 +1556,14 @@ async fn future_yield_and_reversal_dates_are_rejected() {
             as_of: tomorrow.clone(),
         })
         .await;
-    assert!(matches!(future_yield, Err(AppError::Validation { .. })));
+    let message = match future_yield {
+        Err(AppError::Validation { message }) => message,
+        other => panic!("rendimento futuro deveria ser rejeitado: {other:?}"),
+    };
+    assert!(
+        message.contains("não é possível gerar rendimento em data futura"),
+        "{message}"
+    );
 
     let future_reversal = fixture
         .savings
@@ -1386,7 +1572,44 @@ async fn future_yield_and_reversal_dates_are_rejected() {
             as_of: tomorrow,
         })
         .await;
-    assert!(matches!(future_reversal, Err(AppError::Validation { .. })));
+    let message = match future_reversal {
+        Err(AppError::Validation { message }) => message,
+        other => panic!("estorno futuro deveria ser rejeitado: {other:?}"),
+    };
+    assert!(
+        message.contains("não é possível estornar em data futura"),
+        "{message}"
+    );
+
+    let invalid_reversal = fixture
+        .savings
+        .reverse_yield(ReverseSavingsYieldInput {
+            yield_id: original.id.clone(),
+            as_of: "24/11/2026".to_owned(),
+        })
+        .await;
+    let message = match invalid_reversal {
+        Err(AppError::Validation { message }) => message,
+        other => panic!("data inválida deveria ser rejeitada: {other:?}"),
+    };
+    assert!(message.contains("data válida"), "{message}");
+
+    let earlier_reversal = fixture
+        .savings
+        .reverse_yield(ReverseSavingsYieldInput {
+            yield_id: original.id.clone(),
+            as_of: "2026-11-02".to_owned(),
+        })
+        .await;
+    let message = match earlier_reversal {
+        Err(AppError::Validation { message }) => message,
+        other => panic!("estorno anterior deveria ser rejeitado: {other:?}"),
+    };
+    assert!(
+        message.contains("estorno (2026-11-02)")
+            && message.contains("anterior à data do rendimento (2026-11-03)"),
+        "{message}"
+    );
 
     let history = fixture
         .savings

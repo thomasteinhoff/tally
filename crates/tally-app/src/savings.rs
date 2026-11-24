@@ -293,7 +293,8 @@ impl<R: SavingsRepository, C: CdiRatesRepository> SavingsService<R, C> {
         &self,
         input: CreateSavingsYieldInput,
     ) -> Result<SavingsYieldDto, AppError> {
-        let snapshot = self.build_yield(&input.account_id, &input.as_of).await?;
+        let as_of = validate_not_future(&input.as_of, "gerar rendimento")?;
+        let snapshot = self.build_yield(&input.account_id, &as_of).await?;
         self.repo.create_yield(snapshot).await
     }
 
@@ -304,8 +305,9 @@ impl<R: SavingsRepository, C: CdiRatesRepository> SavingsService<R, C> {
         input: ReverseSavingsYieldInput,
     ) -> Result<SavingsYieldDto, AppError> {
         let yield_id = required_id(&input.yield_id, "rendimento")?;
-        let as_of = validate_not_future(&input.as_of)?;
+        let requested = validate_not_future(&input.as_of, "estornar")?;
         let snapshot = self.repo.find_yield(&yield_id).await?;
+        let as_of = compensating_entry_date(&snapshot, &requested);
         self.validate_reversal(&snapshot, &as_of).await?;
 
         let description = format!("Estorno de rendimento em {as_of}");
@@ -321,15 +323,17 @@ impl<R: SavingsRepository, C: CdiRatesRepository> SavingsService<R, C> {
             .await
     }
 
-    /// Estorna na data de hoje e recalcula na data original sem janela para
-    /// falha parcial: as duas operações vivem na mesma transação.
+    /// Estorna e recalcula na data original sem janela para falha parcial: as
+    /// duas operações vivem na mesma transação. Em rendimentos legados com data
+    /// futura, o estorno acompanha a data do registro corrigido.
     pub async fn replace_yield(
         &self,
         input: ReplaceSavingsYieldInput,
     ) -> Result<SavingsYieldDto, AppError> {
         let yield_id = required_id(&input.yield_id, "rendimento")?;
         let snapshot = self.repo.find_yield(&yield_id).await?;
-        let as_of = Local::now().date_naive().format("%Y-%m-%d").to_string();
+        let today = Local::now().date_naive().format("%Y-%m-%d").to_string();
+        let as_of = compensating_entry_date(&snapshot, &today);
         self.validate_reversal(&snapshot, &as_of).await?;
 
         let replacement = self
@@ -346,13 +350,14 @@ impl<R: SavingsRepository, C: CdiRatesRepository> SavingsService<R, C> {
             .await
     }
 
+    /// Também usada pela substituição, que pode recalcular um snapshot legado
+    /// com data futura; o bloqueio de data futura fica em `create_yield`.
     async fn build_yield(
         &self,
         account_id: &str,
         as_of: &str,
     ) -> Result<NewSavingsYield, AppError> {
         let account_id = required_id(account_id, "cofrinho")?;
-        let as_of = validate_not_future(as_of)?;
         let account = self.repo.savings_account(&account_id).await?;
         if !account.is_savings {
             return Err(AppError::validation("a conta não é um cofrinho"));
@@ -371,7 +376,7 @@ impl<R: SavingsRepository, C: CdiRatesRepository> SavingsService<R, C> {
         let percent_bps = account
             .cdi_percent_bps
             .ok_or_else(|| AppError::validation("percentual contratado não configurado"))?;
-        let date = NaiveDate::parse_from_str(&as_of, "%Y-%m-%d")
+        let date = NaiveDate::parse_from_str(as_of, "%Y-%m-%d")
             .map_err(|_| AppError::validation("data de rendimento inválida"))?;
         if !is_yield_day(mode, date) {
             return Err(AppError::validation(
@@ -379,9 +384,9 @@ impl<R: SavingsRepository, C: CdiRatesRepository> SavingsService<R, C> {
             ));
         }
 
-        let base_cents = self.repo.balance_before(&account_id, &as_of).await?;
+        let base_cents = self.repo.balance_before(&account_id, as_of).await?;
         if base_cents <= 0 {
-            if self.repo.balance_on(&account_id, &as_of).await? > 0 {
+            if self.repo.balance_on(&account_id, as_of).await? > 0 {
                 return Err(AppError::validation(
                     "saldo inicial e aplicações na data informada só entram na base no dia seguinte",
                 ));
@@ -392,8 +397,8 @@ impl<R: SavingsRepository, C: CdiRatesRepository> SavingsService<R, C> {
         }
 
         let rate = match mode {
-            YieldMode::Business => self.cdi.rate_on(&as_of).await?,
-            YieldMode::Calendar => self.cdi.rate_on_or_before(&as_of).await?,
+            YieldMode::Business => self.cdi.rate_on(as_of).await?,
+            YieldMode::Calendar => self.cdi.rate_on_or_before(as_of).await?,
         }
         .ok_or_else(|| match mode {
             YieldMode::Business => AppError::validation(
@@ -414,7 +419,7 @@ impl<R: SavingsRepository, C: CdiRatesRepository> SavingsService<R, C> {
             id: Uuid::now_v7().to_string(),
             entry_id: Uuid::now_v7().to_string(),
             account_id,
-            as_of,
+            as_of: as_of.to_owned(),
             mode: calculation.mode,
             contracted_percent_bps: calculation.contracted_percent_bps,
             daily_rate: calculation.daily_rate,
@@ -435,9 +440,10 @@ impl<R: SavingsRepository, C: CdiRatesRepository> SavingsService<R, C> {
             return Err(AppError::conflict("este rendimento já foi estornado"));
         }
         if as_of < snapshot.as_of.as_str() {
-            return Err(AppError::validation(
-                "a data do estorno não pode ser anterior ao rendimento",
-            ));
+            return Err(AppError::validation(format!(
+                "a data do estorno ({as_of}) não pode ser anterior à data do rendimento ({})",
+                snapshot.as_of
+            )));
         }
 
         let account = self.repo.savings_account(&snapshot.account_id).await?;
@@ -450,10 +456,23 @@ impl<R: SavingsRepository, C: CdiRatesRepository> SavingsService<R, C> {
         let balance_cents = self.repo.current_balance(&snapshot.account_id).await?;
         if balance_cents - snapshot.yield_cents < 0 {
             return Err(AppError::validation(
-                "saldo insuficiente no cofrinho para estornar este rendimento",
+                "o valor deste rendimento já foi resgatado ou não está disponível no cofrinho",
             ));
         }
         Ok(())
+    }
+}
+
+/// Registros legados podem ter `as_of` no futuro. Nesse caso não existe data
+/// passada que satisfaça `estorno >= rendimento`, então a compensação usa a
+/// própria data do rendimento. Registros normais mantêm a data pedida e a
+/// validação contra datas anteriores.
+fn compensating_entry_date(snapshot: &SavingsYieldDto, requested: &str) -> String {
+    let today = Local::now().date_naive().format("%Y-%m-%d").to_string();
+    if snapshot.as_of > today {
+        snapshot.as_of.clone()
+    } else {
+        requested.to_owned()
     }
 }
 

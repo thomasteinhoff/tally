@@ -39,15 +39,16 @@ pub(crate) fn validate_date(raw: &str) -> Result<String, AppError> {
         .map_err(|_| AppError::validation("informe uma data válida no formato AAAA-MM-DD"))
 }
 
-/// Datas de rendimento/estorno não podem estar no futuro: a operação depende
-/// do saldo no início do dia e de taxas já publicadas.
-pub fn validate_not_future(raw: &str) -> Result<String, AppError> {
+/// Datas de rendimento/estorno novos não podem estar no futuro: a operação
+/// depende do saldo no início do dia e de taxas já publicadas.
+/// `operation` deixa a mensagem declarar qual ação foi bloqueada.
+pub fn validate_not_future(raw: &str, operation: &str) -> Result<String, AppError> {
     let date = validate_date(raw)?;
     let today = Local::now().date_naive().format("%Y-%m-%d").to_string();
     if date > today {
-        return Err(AppError::validation(
-            "não é possível gerar rendimento em data futura",
-        ));
+        return Err(AppError::validation(format!(
+            "não é possível {operation} em data futura"
+        )));
     }
     Ok(date)
 }
