@@ -1,13 +1,13 @@
 use async_trait::async_trait;
-use chrono::{Datelike, Duration, NaiveDate, Weekday};
+use chrono::{Datelike, Duration, Local, NaiveDate, Weekday};
 use uuid::Uuid;
 
 use crate::dto::{
-    AccountDto, CreateSavingsYieldInput, ReverseSavingsYieldInput, SavingsOverviewDto,
-    SavingsYieldDto,
+    AccountDto, CreateSavingsYieldInput, ReplaceSavingsYieldInput, ReverseSavingsYieldInput,
+    SavingsOverviewDto, SavingsYieldDto,
 };
 use crate::error::AppError;
-use crate::validation::validate_date;
+use crate::validation::validate_not_future;
 
 /// CDI anual usado como referência, em pontos-base (1_000 = 10,00% a.a.).
 ///
@@ -248,12 +248,21 @@ pub trait SavingsRepository: Send + Sync {
     async fn savings_account(&self, id: &str) -> Result<AccountDto, AppError>;
     /// Saldo com todas as postings publicadas em data estritamente anterior a `as_of`.
     async fn balance_before(&self, account_id: &str, as_of: &str) -> Result<i64, AppError>;
+    /// Postings publicadas exatamente em `as_of`, usadas para explicar a base.
+    async fn balance_on(&self, account_id: &str, as_of: &str) -> Result<i64, AppError>;
     async fn current_balance(&self, account_id: &str) -> Result<i64, AppError>;
     async fn create_yield(&self, snapshot: NewSavingsYield) -> Result<SavingsYieldDto, AppError>;
     async fn reverse_yield(
         &self,
         yield_id: &str,
         reversal: NewSavingsReversal,
+    ) -> Result<SavingsYieldDto, AppError>;
+    /// Estorno e novo rendimento em uma única transação.
+    async fn replace_yield(
+        &self,
+        yield_id: &str,
+        reversal: NewSavingsReversal,
+        snapshot: NewSavingsYield,
     ) -> Result<SavingsYieldDto, AppError>;
     async fn find_yield(&self, yield_id: &str) -> Result<SavingsYieldDto, AppError>;
     async fn list_yields(&self, account_id: &str) -> Result<Vec<SavingsYieldDto>, AppError>;
@@ -283,8 +292,66 @@ impl<R: SavingsRepository> SavingsService<R> {
         &self,
         input: CreateSavingsYieldInput,
     ) -> Result<SavingsYieldDto, AppError> {
-        let account_id = required_id(&input.account_id, "cofrinho")?;
-        let as_of = validate_date(&input.as_of)?;
+        let snapshot = self.build_yield(&input.account_id, &input.as_of).await?;
+        self.repo.create_yield(snapshot).await
+    }
+
+    /// Estorno compensatório: preserva o rendimento original e libera a data
+    /// para uma substituição.
+    pub async fn reverse_yield(
+        &self,
+        input: ReverseSavingsYieldInput,
+    ) -> Result<SavingsYieldDto, AppError> {
+        let yield_id = required_id(&input.yield_id, "rendimento")?;
+        let as_of = validate_not_future(&input.as_of)?;
+        let snapshot = self.repo.find_yield(&yield_id).await?;
+        self.validate_reversal(&snapshot, &as_of).await?;
+
+        let description = format!("Estorno de rendimento em {as_of}");
+        self.repo
+            .reverse_yield(
+                &yield_id,
+                NewSavingsReversal {
+                    entry_id: Uuid::now_v7().to_string(),
+                    as_of,
+                    description,
+                },
+            )
+            .await
+    }
+
+    /// Estorna na data de hoje e recalcula na data original sem janela para
+    /// falha parcial: as duas operações vivem na mesma transação.
+    pub async fn replace_yield(
+        &self,
+        input: ReplaceSavingsYieldInput,
+    ) -> Result<SavingsYieldDto, AppError> {
+        let yield_id = required_id(&input.yield_id, "rendimento")?;
+        let snapshot = self.repo.find_yield(&yield_id).await?;
+        let as_of = Local::now().date_naive().format("%Y-%m-%d").to_string();
+        self.validate_reversal(&snapshot, &as_of).await?;
+
+        let replacement = self
+            .build_yield(&snapshot.account_id, &snapshot.as_of)
+            .await?;
+        let reversal_description = format!("Estorno de rendimento em {as_of}");
+        let reversal = NewSavingsReversal {
+            entry_id: Uuid::now_v7().to_string(),
+            as_of,
+            description: reversal_description,
+        };
+        self.repo
+            .replace_yield(&yield_id, reversal, replacement)
+            .await
+    }
+
+    async fn build_yield(
+        &self,
+        account_id: &str,
+        as_of: &str,
+    ) -> Result<NewSavingsYield, AppError> {
+        let account_id = required_id(account_id, "cofrinho")?;
+        let as_of = validate_not_future(as_of)?;
         let account = self.repo.savings_account(&account_id).await?;
         if !account.is_savings {
             return Err(AppError::validation("a conta não é um cofrinho"));
@@ -313,6 +380,11 @@ impl<R: SavingsRepository> SavingsService<R> {
 
         let base_cents = self.repo.balance_before(&account_id, &as_of).await?;
         if base_cents <= 0 {
+            if self.repo.balance_on(&account_id, &as_of).await? > 0 {
+                return Err(AppError::validation(
+                    "saldo inicial e aplicações na data informada só entram na base no dia seguinte",
+                ));
+            }
             return Err(AppError::validation(
                 "o cofrinho não tem saldo no início do dia",
             ));
@@ -324,37 +396,31 @@ impl<R: SavingsRepository> SavingsService<R> {
         }
 
         let description = format!("Rendimento do cofrinho em {as_of}");
-        self.repo
-            .create_yield(NewSavingsYield {
-                id: Uuid::now_v7().to_string(),
-                entry_id: Uuid::now_v7().to_string(),
-                account_id,
-                as_of,
-                mode: calculation.mode,
-                cdi_annual_bps: calculation.cdi_annual_bps,
-                contracted_percent_bps: calculation.contracted_percent_bps,
-                daily_rate: calculation.daily_rate,
-                days: calculation.days,
-                base_cents,
-                yield_cents: calculation.yield_cents,
-                description,
-            })
-            .await
+        Ok(NewSavingsYield {
+            id: Uuid::now_v7().to_string(),
+            entry_id: Uuid::now_v7().to_string(),
+            account_id,
+            as_of,
+            mode: calculation.mode,
+            cdi_annual_bps: calculation.cdi_annual_bps,
+            contracted_percent_bps: calculation.contracted_percent_bps,
+            daily_rate: calculation.daily_rate,
+            days: calculation.days,
+            base_cents,
+            yield_cents: calculation.yield_cents,
+            description,
+        })
     }
 
-    /// Estorno compensatório: preserva o rendimento original e libera a data
-    /// para uma substituição.
-    pub async fn reverse_yield(
+    async fn validate_reversal(
         &self,
-        input: ReverseSavingsYieldInput,
-    ) -> Result<SavingsYieldDto, AppError> {
-        let yield_id = required_id(&input.yield_id, "rendimento")?;
-        let as_of = validate_date(&input.as_of)?;
-        let snapshot = self.repo.find_yield(&yield_id).await?;
+        snapshot: &SavingsYieldDto,
+        as_of: &str,
+    ) -> Result<(), AppError> {
         if snapshot.status != "confirmed" || snapshot.reversal_entry_id.is_some() {
             return Err(AppError::conflict("este rendimento já foi estornado"));
         }
-        if as_of < snapshot.as_of {
+        if as_of < snapshot.as_of.as_str() {
             return Err(AppError::validation(
                 "a data do estorno não pode ser anterior ao rendimento",
             ));
@@ -373,18 +439,7 @@ impl<R: SavingsRepository> SavingsService<R> {
                 "saldo insuficiente no cofrinho para estornar este rendimento",
             ));
         }
-
-        let description = format!("Estorno de rendimento em {as_of}");
-        self.repo
-            .reverse_yield(
-                &yield_id,
-                NewSavingsReversal {
-                    entry_id: Uuid::now_v7().to_string(),
-                    as_of,
-                    description,
-                },
-            )
-            .await
+        Ok(())
     }
 }
 

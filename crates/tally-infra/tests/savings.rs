@@ -1,10 +1,11 @@
-use chrono::Local;
+use chrono::{Duration, Local};
 use rusqlite::{OptionalExtension, params};
 use tally_app::{
     AccountsService, AppError, CategoriesService, CreateAccountInput, CreateAdjustmentInput,
     CreateCardPaymentInput, CreateCategoryInput, CreateExpenseInput, CreateIncomeInput,
-    CreateSavingsYieldInput, CreateTransferInput, MovementFilter, MovementsService, ReportFilter,
-    ReportsService, ReverseSavingsYieldInput, SavingsService, UpdateMovementInput,
+    CreateSavingsYieldInput, CreateTransferInput, MovementFilter, MovementsService,
+    ReplaceSavingsYieldInput, ReportFilter, ReportsService, ReverseSavingsYieldInput,
+    SavingsService, UpdateMovementInput,
 };
 use tally_infra::{
     Database, SqliteAccountsRepository, SqliteCardsRepository, SqliteCategoriesRepository,
@@ -1057,4 +1058,215 @@ async fn savings_with_history_requires_archiving_and_keeps_yield_snapshots() {
         balance(&fixture, &pot).await,
         110_000 + yield_result.yield_cents
     );
+}
+
+#[tokio::test]
+async fn future_yield_and_reversal_dates_are_rejected() {
+    let fixture = fixture().await;
+    let bank = account(&fixture, "Banco", 500_000).await;
+    let pot = savings(&fixture, "Cofrinho", "calendar", 100.0).await;
+    transfer(&fixture, &bank, &pot, 100_000, "2026-11-02").await;
+    let original = yield_at(&fixture, &pot, "2026-11-03").await;
+    let tomorrow = (Local::now().date_naive() + Duration::days(1))
+        .format("%Y-%m-%d")
+        .to_string();
+
+    let future_yield = fixture
+        .savings
+        .create_yield(CreateSavingsYieldInput {
+            account_id: pot.clone(),
+            as_of: tomorrow.clone(),
+        })
+        .await;
+    assert!(matches!(future_yield, Err(AppError::Validation { .. })));
+
+    let future_reversal = fixture
+        .savings
+        .reverse_yield(ReverseSavingsYieldInput {
+            yield_id: original.id.clone(),
+            as_of: tomorrow,
+        })
+        .await;
+    assert!(matches!(future_reversal, Err(AppError::Validation { .. })));
+
+    let history = fixture
+        .savings
+        .overview(&pot)
+        .await
+        .expect("overview")
+        .yields;
+    assert_eq!(history.len(), 1);
+    assert_eq!(history[0].status, "confirmed");
+}
+
+#[tokio::test]
+async fn base_messages_explain_when_deposits_start_counting() {
+    let fixture = fixture().await;
+    let today = Local::now().date_naive().format("%Y-%m-%d").to_string();
+    let bank = account(&fixture, "Banco", 500_000).await;
+
+    let empty = savings(&fixture, "Vazio", "calendar", 100.0).await;
+    let no_balance = fixture
+        .savings
+        .create_yield(CreateSavingsYieldInput {
+            account_id: empty,
+            as_of: "2026-11-03".to_owned(),
+        })
+        .await
+        .expect_err("sem saldo");
+    let message = match no_balance {
+        AppError::Validation { message } => message,
+        other => panic!("erro inesperado: {other:?}"),
+    };
+    assert!(
+        message.contains("não tem saldo no início do dia"),
+        "{message}"
+    );
+
+    let transferred = savings(&fixture, "Com aplicação", "calendar", 100.0).await;
+    transfer(&fixture, &bank, &transferred, 100_000, &today).await;
+    let same_day = fixture
+        .savings
+        .create_yield(CreateSavingsYieldInput {
+            account_id: transferred,
+            as_of: today.clone(),
+        })
+        .await
+        .expect_err("aplicação de hoje ainda não é base");
+    let message = match same_day {
+        AppError::Validation { message } => message,
+        other => panic!("erro inesperado: {other:?}"),
+    };
+    assert!(
+        message.contains("só entram na base no dia seguinte"),
+        "{message}"
+    );
+
+    let opened = fixture
+        .accounts
+        .create(CreateAccountInput {
+            name: "Saldo inicial hoje".to_owned(),
+            account_type: "savings".to_owned(),
+            opening_balance_cents: 100_000,
+            credit_limit_cents: None,
+            is_savings: Some(true),
+            yield_mode: Some("calendar".to_owned()),
+            cdi_percent: Some(100.0),
+        })
+        .await
+        .expect("savings")
+        .id;
+    let opening = fixture
+        .savings
+        .create_yield(CreateSavingsYieldInput {
+            account_id: opened,
+            as_of: today,
+        })
+        .await
+        .expect_err("saldo inicial de hoje ainda não é base");
+    assert!(
+        opening
+            .to_string()
+            .contains("só entram na base no dia seguinte"),
+        "{opening}"
+    );
+}
+
+#[tokio::test]
+async fn replace_yield_recalculates_in_one_backend_call() {
+    let fixture = fixture().await;
+    let bank = account(&fixture, "Banco", 500_000).await;
+    let pot = savings(&fixture, "Cofrinho", "calendar", 130.0).await;
+    transfer(&fixture, &bank, &pot, 100_000, "2026-11-02").await;
+    let original = yield_at(&fixture, &pot, "2026-11-03").await;
+
+    let replacement = fixture
+        .savings
+        .replace_yield(ReplaceSavingsYieldInput {
+            yield_id: original.id.clone(),
+        })
+        .await
+        .expect("replacement");
+    assert_ne!(replacement.id, original.id);
+    assert_eq!(replacement.as_of, original.as_of);
+    assert_eq!(replacement.status, "confirmed");
+
+    let history = fixture
+        .savings
+        .overview(&pot)
+        .await
+        .expect("overview")
+        .yields;
+    let old = history
+        .iter()
+        .find(|item| item.id == original.id)
+        .expect("snapshot original");
+    assert_eq!(old.status, "reversed");
+    assert!(old.reversal_entry_id.is_some());
+    assert_eq!(old.yield_cents, original.yield_cents);
+    assert_eq!(history.len(), 2);
+}
+
+#[tokio::test]
+async fn failed_replacement_rolls_back_the_whole_operation() {
+    let fixture = fixture().await;
+    let bank = account(&fixture, "Banco", 500_000).await;
+    let pot = savings(&fixture, "Cofrinho", "calendar", 100.0).await;
+    transfer(&fixture, &bank, &pot, 100_000, "2026-11-02").await;
+    let original = yield_at(&fixture, &pot, "2026-11-03").await;
+    let balance_before = balance(&fixture, &pot).await;
+
+    let entries_before: i64 = fixture
+        .db
+        .call(|connection| {
+            connection.query_row("SELECT COUNT(*) FROM journal_entries", [], |row| row.get(0))
+        })
+        .await
+        .expect("entries");
+    fixture
+        .db
+        .call(|connection| {
+            connection.execute_batch(
+                "CREATE TRIGGER fail_replacement BEFORE INSERT ON journal_entries
+                 WHEN NEW.kind = 'adjustment' AND NEW.occurred_on = '2026-11-03'
+                 BEGIN SELECT RAISE(ABORT, 'falha forçada no recálculo'); END;",
+            )
+        })
+        .await
+        .expect("trigger");
+
+    let failed = fixture
+        .savings
+        .replace_yield(ReplaceSavingsYieldInput {
+            yield_id: original.id.clone(),
+        })
+        .await;
+    assert!(failed.is_err());
+
+    fixture
+        .db
+        .call(|connection| connection.execute_batch("DROP TRIGGER fail_replacement;"))
+        .await
+        .expect("drop trigger");
+
+    let history = fixture
+        .savings
+        .overview(&pot)
+        .await
+        .expect("overview")
+        .yields;
+    assert_eq!(history.len(), 1);
+    assert_eq!(history[0].id, original.id);
+    assert_eq!(history[0].status, "confirmed");
+    assert!(history[0].reversal_entry_id.is_none());
+    assert_eq!(balance(&fixture, &pot).await, balance_before);
+
+    let entries_after: i64 = fixture
+        .db
+        .call(|connection| {
+            connection.query_row("SELECT COUNT(*) FROM journal_entries", [], |row| row.get(0))
+        })
+        .await
+        .expect("entries");
+    assert_eq!(entries_after, entries_before);
 }

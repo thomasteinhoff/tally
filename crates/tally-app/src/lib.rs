@@ -28,9 +28,9 @@ pub use dto::{
     CsvExportDto, DashboardDto, ExpenseTrendDto, ExportCsvInput, InstallmentAllocationDto,
     InstallmentDto, InstallmentPlanDto, IntegrityReportDto, MonthlyExpenseDto, MovementDto,
     MovementFilter, NetWorthAccountDto, NetWorthHistoryDto, NetWorthPointDto, NetWorthReportDto,
-    PeriodSpendingBucketDto, PeriodSpendingReportDto, ReportFilter, RestoreResultDto,
-    ReverseSavingsYieldInput, SavingsOverviewDto, SavingsYieldDto, SettingsDto, StatementLineDto,
-    UpdateInstallmentPlanInput, UpdateMovementInput, UpdateSettingsInput,
+    PeriodSpendingBucketDto, PeriodSpendingReportDto, ReplaceSavingsYieldInput, ReportFilter,
+    RestoreResultDto, ReverseSavingsYieldInput, SavingsOverviewDto, SavingsYieldDto, SettingsDto,
+    StatementLineDto, UpdateInstallmentPlanInput, UpdateMovementInput, UpdateSettingsInput,
 };
 pub use error::{AppError, AppErrorDto};
 pub use movements::{MovementsRepository, MovementsService, NewMovement};

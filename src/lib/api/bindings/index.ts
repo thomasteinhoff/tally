@@ -40,6 +40,7 @@ export type { NetWorthPointDto } from "./NetWorthPointDto";
 export type { NetWorthReportDto } from "./NetWorthReportDto";
 export type { PeriodSpendingBucketDto } from "./PeriodSpendingBucketDto";
 export type { PeriodSpendingReportDto } from "./PeriodSpendingReportDto";
+export type { ReplaceSavingsYieldInput } from "./ReplaceSavingsYieldInput";
 export type { ReportFilter } from "./ReportFilter";
 export type { RestoreResultDto } from "./RestoreResultDto";
 export type { ReverseSavingsYieldInput } from "./ReverseSavingsYieldInput";

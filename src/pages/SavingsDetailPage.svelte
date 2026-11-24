@@ -7,6 +7,7 @@
     createTransfer,
     getSavingsOverview,
     listAccounts,
+    replaceSavingsYield,
     reverseSavingsYield,
   } from "../lib/api";
   import { confirmAction } from "../lib/confirm";
@@ -104,10 +105,9 @@
       "Substituir",
     );
     if (confirmed) {
-      void perform("Rendimento substituído.", async () => {
-        await reverseSavingsYield({ yield_id: item.id, as_of: todayIso() });
-        await createSavingsYield({ account_id: accountId, as_of: item.as_of });
-      });
+      void perform("Rendimento substituído.", () =>
+        replaceSavingsYield({ yield_id: item.id }),
+      );
     }
   }
 
@@ -257,7 +257,7 @@
       <div class="filters">
         <label class="field">
           <span>Data do rendimento</span>
-          <input type="date" bind:value={yieldDate} />
+          <input type="date" bind:value={yieldDate} max={todayIso()} />
         </label>
         <div class="field field--inline">
           <button
@@ -274,9 +274,9 @@
         <div class="panel-footnote">
           <span class="mono">base = saldo no início do dia</span>
           <span>
-            Aplicações e resgates na data só afetam os dias seguintes. Em
-            “Somente dias úteis”, fins de semana e feriados nacionais não geram
-            rendimento.
+            Saldo inicial, aplicações e resgates na data só entram na base no
+            dia seguinte. Em “Somente dias úteis”, fins de semana e feriados
+            nacionais não geram rendimento.
           </span>
         </div>
       </div>

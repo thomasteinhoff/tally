@@ -31,6 +31,7 @@ import type {
   NetWorthHistoryDto,
   NetWorthReportDto,
   PeriodSpendingReportDto,
+  ReplaceSavingsYieldInput,
   ReportFilter,
   RestoreResultDto,
   ReverseSavingsYieldInput,
@@ -97,6 +98,12 @@ export function reverseSavingsYield(
   input: ReverseSavingsYieldInput,
 ): Promise<SavingsYieldDto> {
   return invoke<SavingsYieldDto>("reverse_savings_yield", { input });
+}
+
+export function replaceSavingsYield(
+  input: ReplaceSavingsYieldInput,
+): Promise<SavingsYieldDto> {
+  return invoke<SavingsYieldDto>("replace_savings_yield", { input });
 }
 
 export function listCategories(

@@ -6,9 +6,10 @@ use tally_app::{
     CreateExpenseInput, CreateIncomeInput, CreateSavingsYieldInput, CreateTransferInput,
     CsvExportDto, DashboardDto, ExpenseTrendDto, ExportCsvInput, InstallmentPlanDto,
     IntegrityReportDto, MovementDto, MovementFilter, MovementsService, NetWorthHistoryDto,
-    NetWorthReportDto, PeriodSpendingReportDto, ReportFilter, ReportsService, RestoreResultDto,
-    ReverseSavingsYieldInput, SavingsOverviewDto, SavingsService, SavingsYieldDto, SettingsDto,
-    UpdateInstallmentPlanInput, UpdateMovementInput, UpdateSettingsInput,
+    NetWorthReportDto, PeriodSpendingReportDto, ReplaceSavingsYieldInput, ReportFilter,
+    ReportsService, RestoreResultDto, ReverseSavingsYieldInput, SavingsOverviewDto, SavingsService,
+    SavingsYieldDto, SettingsDto, UpdateInstallmentPlanInput, UpdateMovementInput,
+    UpdateSettingsInput,
 };
 use tally_infra::{
     DataTools, Database, SqliteAccountsRepository, SqliteBootstrapRepository,
@@ -184,6 +185,14 @@ pub async fn reverse_savings_yield(
     input: ReverseSavingsYieldInput,
 ) -> Result<SavingsYieldDto, AppError> {
     savings_service(state.inner())?.reverse_yield(input).await
+}
+
+#[tauri::command]
+pub async fn replace_savings_yield(
+    state: State<'_, AppState>,
+    input: ReplaceSavingsYieldInput,
+) -> Result<SavingsYieldDto, AppError> {
+    savings_service(state.inner())?.replace_yield(input).await
 }
 
 #[tauri::command]

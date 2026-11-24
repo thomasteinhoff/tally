@@ -1,4 +1,4 @@
-use chrono::NaiveDate;
+use chrono::{Local, NaiveDate};
 use tally_domain::period::Period;
 
 use crate::error::AppError;
@@ -37,6 +37,19 @@ pub(crate) fn validate_date(raw: &str) -> Result<String, AppError> {
     NaiveDate::parse_from_str(value, "%Y-%m-%d")
         .map(|date| date.format("%Y-%m-%d").to_string())
         .map_err(|_| AppError::validation("informe uma data válida no formato AAAA-MM-DD"))
+}
+
+/// Datas de rendimento/estorno não podem estar no futuro: a operação depende
+/// do saldo no início do dia e de taxas já publicadas.
+pub fn validate_not_future(raw: &str) -> Result<String, AppError> {
+    let date = validate_date(raw)?;
+    let today = Local::now().date_naive().format("%Y-%m-%d").to_string();
+    if date > today {
+        return Err(AppError::validation(
+            "não é possível gerar rendimento em data futura",
+        ));
+    }
+    Ok(date)
 }
 
 pub(crate) fn normalize_occurred(

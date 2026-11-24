@@ -74,6 +74,25 @@ impl SavingsRepository for SqliteSavingsRepository {
             .await
     }
 
+    async fn balance_on(&self, account_id: &str, as_of: &str) -> Result<i64, AppError> {
+        let account_id = account_id.to_owned();
+        let as_of = as_of.to_owned();
+        self.db
+            .call(move |connection| {
+                connection.query_row(
+                    "SELECT COALESCE(SUM(p.amount_cents), 0)
+                         FROM postings p
+                         JOIN journal_entries e ON e.id = p.entry_id
+                         WHERE p.account_id = ?1
+                           AND e.posted_at IS NOT NULL
+                           AND e.occurred_on = ?2",
+                    params![account_id, as_of],
+                    |row| row.get::<_, i64>(0),
+                )
+            })
+            .await
+    }
+
     async fn current_balance(&self, account_id: &str) -> Result<i64, AppError> {
         let account_id = account_id.to_owned();
         self.db
@@ -91,54 +110,11 @@ impl SavingsRepository for SqliteSavingsRepository {
     }
 
     async fn create_yield(&self, snapshot: NewSavingsYield) -> Result<SavingsYieldDto, AppError> {
+        let id = snapshot.id.clone();
         self.db
             .transaction(move |transaction| {
-                // FK deferida: o snapshot entra antes do entry para que os
-                // triggers de cofrinho reconheçam o lançamento como rendimento.
-                transaction
-                    .execute(
-                        "INSERT INTO savings_yields (
-                            id, account_id, as_of, mode, cdi_annual_bps,
-                            contracted_percent_bps, daily_rate, days, base_cents,
-                            yield_cents, status, entry_id, created_at, updated_at
-                         ) VALUES (
-                            ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9,
-                            ?10, 'confirmed', ?11,
-                            strftime('%Y-%m-%dT%H:%M:%fZ', 'now'),
-                            strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
-                         )",
-                        params![
-                            snapshot.id,
-                            snapshot.account_id,
-                            snapshot.as_of,
-                            snapshot.mode.as_str(),
-                            snapshot.cdi_annual_bps,
-                            snapshot.contracted_percent_bps,
-                            snapshot.daily_rate,
-                            snapshot.days,
-                            snapshot.base_cents,
-                            snapshot.yield_cents,
-                            snapshot.entry_id,
-                        ],
-                    )
-                    .map_err(map_sqlite_error)?;
-
-                insert_entry(
-                    transaction,
-                    &snapshot.entry_id,
-                    &snapshot.as_of,
-                    &snapshot.description,
-                    &snapshot.account_id,
-                )?;
-                insert_postings(
-                    transaction,
-                    &snapshot.entry_id,
-                    &snapshot.account_id,
-                    snapshot.yield_cents,
-                )?;
-                post_entry(transaction, &snapshot.entry_id)?;
-
-                require_yield(transaction, &snapshot.id)
+                insert_yield(transaction, snapshot)?;
+                require_yield(transaction, &id)
             })
             .await
     }
@@ -149,48 +125,27 @@ impl SavingsRepository for SqliteSavingsRepository {
         reversal: NewSavingsReversal,
     ) -> Result<SavingsYieldDto, AppError> {
         let yield_id = yield_id.to_owned();
-
         self.db
             .transaction(move |transaction| {
-                let (account_id, yield_cents): (String, i64) = transaction
-                    .query_row(
-                        "SELECT account_id, yield_cents FROM savings_yields
-                         WHERE id = ?1 AND status = 'confirmed'",
-                        [&yield_id],
-                        |row| Ok((row.get(0)?, row.get(1)?)),
-                    )
-                    .optional()
-                    .map_err(map_sqlite_error)?
-                    .ok_or_else(|| {
-                        AppError::conflict("rendimento não encontrado ou já estornado")
-                    })?;
-
-                // A FK deferida permite apontar para o entry que será gravado
-                // a seguir; o trigger de tipo de entry já reconhece o estorno.
-                let changed = transaction
-                    .execute(
-                        "UPDATE savings_yields
-                         SET status = 'reversed', reversal_entry_id = ?1,
-                             updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
-                         WHERE id = ?2 AND status = 'confirmed'",
-                        params![reversal.entry_id, yield_id],
-                    )
-                    .map_err(map_sqlite_error)?;
-                if changed == 0 {
-                    return Err(AppError::conflict("rendimento já estornado"));
-                }
-
-                insert_entry(
-                    transaction,
-                    &reversal.entry_id,
-                    &reversal.as_of,
-                    &reversal.description,
-                    &account_id,
-                )?;
-                insert_postings(transaction, &reversal.entry_id, &account_id, -yield_cents)?;
-                post_entry(transaction, &reversal.entry_id)?;
-
+                insert_reversal(transaction, &yield_id, reversal)?;
                 require_yield(transaction, &yield_id)
+            })
+            .await
+    }
+
+    async fn replace_yield(
+        &self,
+        yield_id: &str,
+        reversal: NewSavingsReversal,
+        snapshot: NewSavingsYield,
+    ) -> Result<SavingsYieldDto, AppError> {
+        let yield_id = yield_id.to_owned();
+        let replacement_id = snapshot.id.clone();
+        self.db
+            .transaction(move |transaction| {
+                insert_reversal(transaction, &yield_id, reversal)?;
+                insert_yield(transaction, snapshot)?;
+                require_yield(transaction, &replacement_id)
             })
             .await
     }
@@ -217,6 +172,98 @@ impl SavingsRepository for SqliteSavingsRepository {
             })
             .await
     }
+}
+
+fn insert_yield(
+    transaction: &rusqlite::Transaction<'_>,
+    snapshot: NewSavingsYield,
+) -> Result<(), AppError> {
+    // FK deferida: o snapshot entra antes do entry para que os triggers de
+    // cofrinho reconheçam o lançamento como rendimento.
+    transaction
+        .execute(
+            "INSERT INTO savings_yields (
+                id, account_id, as_of, mode, cdi_annual_bps,
+                contracted_percent_bps, daily_rate, days, base_cents,
+                yield_cents, status, entry_id, created_at, updated_at
+             ) VALUES (
+                ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9,
+                ?10, 'confirmed', ?11,
+                strftime('%Y-%m-%dT%H:%M:%fZ', 'now'),
+                strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+             )",
+            params![
+                snapshot.id,
+                snapshot.account_id,
+                snapshot.as_of,
+                snapshot.mode.as_str(),
+                snapshot.cdi_annual_bps,
+                snapshot.contracted_percent_bps,
+                snapshot.daily_rate,
+                snapshot.days,
+                snapshot.base_cents,
+                snapshot.yield_cents,
+                snapshot.entry_id,
+            ],
+        )
+        .map_err(map_sqlite_error)?;
+
+    insert_entry(
+        transaction,
+        &snapshot.entry_id,
+        &snapshot.as_of,
+        &snapshot.description,
+        &snapshot.account_id,
+    )?;
+    insert_postings(
+        transaction,
+        &snapshot.entry_id,
+        &snapshot.account_id,
+        snapshot.yield_cents,
+    )?;
+    post_entry(transaction, &snapshot.entry_id)
+}
+
+fn insert_reversal(
+    transaction: &rusqlite::Transaction<'_>,
+    yield_id: &str,
+    reversal: NewSavingsReversal,
+) -> Result<(), AppError> {
+    let (account_id, yield_cents): (String, i64) = transaction
+        .query_row(
+            "SELECT account_id, yield_cents FROM savings_yields
+             WHERE id = ?1 AND status = 'confirmed'",
+            [yield_id],
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        )
+        .optional()
+        .map_err(map_sqlite_error)?
+        .ok_or_else(|| AppError::conflict("rendimento não encontrado ou já estornado"))?;
+
+    // A FK deferida permite apontar para o entry que será gravado a seguir;
+    // o trigger de tipo de entry já reconhece o estorno.
+    let changed = transaction
+        .execute(
+            "UPDATE savings_yields
+             SET status = 'reversed', reversal_entry_id = ?1,
+                 updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+             WHERE id = ?2 AND status = 'confirmed'",
+            params![reversal.entry_id, yield_id],
+        )
+        .map_err(map_sqlite_error)?;
+    if changed == 0 {
+        return Err(AppError::conflict("rendimento já estornado"));
+    }
+
+    insert_entry(
+        transaction,
+        &reversal.entry_id,
+        &reversal.as_of,
+        &reversal.description,
+        &account_id,
+    )?;
+    insert_postings(transaction, &reversal.entry_id, &account_id, -yield_cents)?;
+    post_entry(transaction, &reversal.entry_id)
 }
 
 fn insert_entry(

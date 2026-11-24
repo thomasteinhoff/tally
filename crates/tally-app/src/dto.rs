@@ -114,6 +114,13 @@ pub struct ReverseSavingsYieldInput {
     pub as_of: String,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[ts(export, export_to = "../../../src/lib/api/bindings/")]
+pub struct ReplaceSavingsYieldInput {
+    /// Rendimento a estornar e recalcular na mesma data, em uma transação.
+    pub yield_id: String,
+}
+
 /// Histórico completo de rendimentos e estornos da tela do cofrinho.
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
 #[ts(export, export_to = "../../../src/lib/api/bindings/")]

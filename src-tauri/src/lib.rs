@@ -64,6 +64,7 @@ pub fn run() {
             commands::get_savings_overview,
             commands::create_savings_yield,
             commands::reverse_savings_yield,
+            commands::replace_savings_yield,
             commands::list_categories,
             commands::create_category,
             commands::update_category,
