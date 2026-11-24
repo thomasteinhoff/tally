@@ -387,9 +387,10 @@ fn validate_references(
     Ok(())
 }
 
-/// Uma fonte de verdade para as operações de cofrinho: só transferência com
-/// conta convencional, sem transferência entre cofrinhos e sem resgate que
-/// deixe saldo negativo. A migration repete só as invariantes estruturais.
+/// Uma fonte de verdade para as operações de cofrinho: transferência com
+/// conta convencional ou ajuste de saldo contra o patrimônio. Rendimentos e
+/// estornos têm caminho próprio e nunca chegam aqui. A migration repete só as
+/// invariantes estruturais.
 fn ensure_savings_operation(
     transaction: &rusqlite::Transaction<'_>,
     movement: &NewMovement,
@@ -402,28 +403,35 @@ fn ensure_savings_operation(
         return Ok(());
     }
 
-    if movement.kind != MovementKind::Transfer || movement.counterparty_account_id.is_none() {
+    let is_transfer = movement.kind == MovementKind::Transfer;
+    let is_adjustment = movement.kind == MovementKind::Adjustment;
+    let invalid_shape = (!is_transfer && !is_adjustment)
+        || (is_transfer && movement.counterparty_account_id.is_none())
+        || (is_adjustment && movement.counterparty_account_id.is_some());
+    if invalid_shape {
         return Err(AppError::validation(
-            "cofrinhos só aceitam transferências com uma conta convencional",
+            "cofrinhos só aceitam transferências com uma conta convencional ou ajustes de saldo",
         ));
     }
 
-    if primary_savings && counterparty_savings {
+    if is_transfer && primary_savings && counterparty_savings {
         return Err(AppError::validation(
             "transferências entre cofrinhos não são permitidas",
         ));
     }
 
-    if primary_savings {
+    if (is_transfer || is_adjustment) && primary_savings {
         let debit = movement
             .postings
             .iter()
             .find(|posting| posting.account_id == movement.primary_account_id)
             .map_or(0, |posting| posting.amount.cents());
         if debit < 0 && account_balance(transaction, &movement.primary_account_id)? + debit < 0 {
-            return Err(AppError::validation(
-                "saldo insuficiente no cofrinho para o resgate",
-            ));
+            return Err(AppError::validation(if is_adjustment {
+                "saldo insuficiente no cofrinho para o ajuste negativo"
+            } else {
+                "saldo insuficiente no cofrinho para o resgate"
+            }));
         }
     }
 

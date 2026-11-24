@@ -382,20 +382,6 @@ async fn invalid_operations_on_savings_are_blocked() {
         .await;
     assert!(matches!(invalid_income, Err(AppError::Validation { .. })));
 
-    let invalid_adjustment = fixture
-        .movements
-        .create_adjustment(CreateAdjustmentInput {
-            account_id: pot.clone(),
-            amount_cents: 100,
-            occurred_on: "2026-11-03".to_owned(),
-            description: None,
-        })
-        .await;
-    assert!(matches!(
-        invalid_adjustment,
-        Err(AppError::Validation { .. })
-    ));
-
     let invalid_transfer = fixture
         .movements
         .create_transfer(CreateTransferInput {
@@ -499,7 +485,27 @@ async fn savings_transfers_do_not_change_income_expense_or_cash_flow() {
 
     transfer(&fixture, &bank, &pot, 100_000, "2026-11-03").await;
     transfer(&fixture, &pot, &bank, 20_000, "2026-11-04").await;
-    yield_at(&fixture, &pot, "2026-11-05").await;
+    fixture
+        .movements
+        .create_adjustment(CreateAdjustmentInput {
+            account_id: pot.clone(),
+            amount_cents: 10_000,
+            occurred_on: "2026-11-05".to_owned(),
+            description: None,
+        })
+        .await
+        .expect("positive adjustment");
+    fixture
+        .movements
+        .create_adjustment(CreateAdjustmentInput {
+            account_id: pot.clone(),
+            amount_cents: -5_000,
+            occurred_on: "2026-11-06".to_owned(),
+            description: None,
+        })
+        .await
+        .expect("negative adjustment");
+    yield_at(&fixture, &pot, "2026-11-07").await;
 
     assert_eq!(
         fixture
@@ -719,8 +725,9 @@ async fn migration_0005_repairs_legacy_trigger_for_savings_opening_balance() {
         })
         .await
         .expect("schema should be readable");
-    assert_eq!(version, 5);
+    assert_eq!(version, 6);
     assert!(trigger_sql.contains("NEW.kind <> 'opening_balance'"));
+    assert!(trigger_sql.contains("NEW.kind <> 'adjustment'"));
 
     let accounts = AccountsService::new(SqliteAccountsRepository::new(db.clone()));
     let pot = accounts
@@ -859,4 +866,195 @@ async fn persistence_blocks_invalid_savings_entries_even_outside_the_service() {
         })
         .await;
     assert!(rejected.is_err());
+}
+
+#[tokio::test]
+async fn savings_accepts_positive_and_negative_adjustments_and_blocks_negative_balance() {
+    let fixture = fixture().await;
+    let pot = savings(&fixture, "Cofrinho", "calendar", 100.0).await;
+
+    let positive = fixture
+        .movements
+        .create_adjustment(CreateAdjustmentInput {
+            account_id: pot.clone(),
+            amount_cents: 100_000,
+            occurred_on: "2026-11-02".to_owned(),
+            description: Some("Correção positiva".to_owned()),
+        })
+        .await
+        .expect("positive adjustment");
+    assert_eq!(positive.kind, "adjustment");
+    assert_eq!(balance(&fixture, &pot).await, 100_000);
+
+    let negative = fixture
+        .movements
+        .create_adjustment(CreateAdjustmentInput {
+            account_id: pot.clone(),
+            amount_cents: -40_000,
+            occurred_on: "2026-11-03".to_owned(),
+            description: None,
+        })
+        .await
+        .expect("negative adjustment");
+    assert_eq!(negative.kind, "adjustment");
+    assert_eq!(balance(&fixture, &pot).await, 60_000);
+
+    let excessive = fixture
+        .movements
+        .create_adjustment(CreateAdjustmentInput {
+            account_id: pot.clone(),
+            amount_cents: -60_001,
+            occurred_on: "2026-11-04".to_owned(),
+            description: None,
+        })
+        .await;
+    assert!(matches!(excessive, Err(AppError::Validation { .. })));
+    assert_eq!(balance(&fixture, &pot).await, 60_000);
+
+    let movements = fixture
+        .movements
+        .list(Some(movement_filter()))
+        .await
+        .expect("movements");
+    assert_eq!(movements.len(), 2);
+    assert!(movements.iter().any(|item| item.id == positive.id));
+    assert!(movements.iter().any(|item| item.id == negative.id));
+}
+
+#[tokio::test]
+async fn savings_adjustments_keep_conventional_edit_and_delete() {
+    let fixture = fixture().await;
+    let pot = savings(&fixture, "Cofrinho", "calendar", 100.0).await;
+    let adjustment = fixture
+        .movements
+        .create_adjustment(CreateAdjustmentInput {
+            account_id: pot.clone(),
+            amount_cents: 100_000,
+            occurred_on: "2026-11-02".to_owned(),
+            description: None,
+        })
+        .await
+        .expect("adjustment");
+
+    let updated = fixture
+        .movements
+        .update(
+            &adjustment.id,
+            UpdateMovementInput {
+                kind: "adjustment".to_owned(),
+                primary_account_id: pot.clone(),
+                counterparty_account_id: None,
+                category_id: None,
+                amount_cents: 70_000,
+                occurred_on: "2026-11-02".to_owned(),
+                occurred_time: None,
+                manual_period: None,
+                description: None,
+                payment_method: None,
+            },
+        )
+        .await
+        .expect("adjustment should be editable");
+    assert_eq!(updated.amount_cents, 70_000);
+    assert_eq!(balance(&fixture, &pot).await, 70_000);
+
+    fixture
+        .movements
+        .delete(&adjustment.id)
+        .await
+        .expect("adjustment should be deletable");
+    assert_eq!(balance(&fixture, &pot).await, 0);
+}
+
+#[tokio::test]
+async fn savings_with_only_opening_balance_can_be_deleted() {
+    let fixture = fixture().await;
+    let pot = fixture
+        .accounts
+        .create(CreateAccountInput {
+            name: "Cofrinho só saldo inicial".to_owned(),
+            account_type: "savings".to_owned(),
+            opening_balance_cents: 100_000,
+            credit_limit_cents: None,
+            is_savings: Some(true),
+            yield_mode: Some("calendar".to_owned()),
+            cdi_percent: Some(100.0),
+        })
+        .await
+        .expect("savings should be created")
+        .id;
+
+    fixture
+        .accounts
+        .delete(&pot)
+        .await
+        .expect("savings with only opening balance should be deletable");
+
+    assert!(
+        fixture
+            .accounts
+            .list(true)
+            .await
+            .expect("accounts")
+            .iter()
+            .all(|account| account.id != pot)
+    );
+    let entries: i64 = fixture
+        .db
+        .call(|connection| {
+            connection.query_row("SELECT COUNT(*) FROM journal_entries", [], |row| row.get(0))
+        })
+        .await
+        .expect("entries");
+    assert_eq!(entries, 0);
+}
+
+#[tokio::test]
+async fn savings_with_history_requires_archiving_and_keeps_yield_snapshots() {
+    let fixture = fixture().await;
+    let bank = account(&fixture, "Banco", 500_000).await;
+    let pot = savings(&fixture, "Cofrinho", "calendar", 100.0).await;
+    transfer(&fixture, &bank, &pot, 100_000, "2026-11-02").await;
+
+    let rejected = fixture.accounts.delete(&pot).await;
+    let message = match rejected {
+        Err(AppError::Conflict { message }) => message,
+        other => panic!("delete deveria conflitar: {other:?}"),
+    };
+    assert!(message.contains("arquive"), "mensagem: {message}");
+
+    fixture
+        .movements
+        .create_adjustment(CreateAdjustmentInput {
+            account_id: pot.clone(),
+            amount_cents: 10_000,
+            occurred_on: "2026-11-03".to_owned(),
+            description: None,
+        })
+        .await
+        .expect("adjustment");
+    assert!(matches!(
+        fixture.accounts.delete(&pot).await,
+        Err(AppError::Conflict { .. })
+    ));
+
+    let yield_result = yield_at(&fixture, &pot, "2026-11-04").await;
+    assert!(matches!(
+        fixture.accounts.delete(&pot).await,
+        Err(AppError::Conflict { .. })
+    ));
+
+    let history = fixture
+        .savings
+        .overview(&pot)
+        .await
+        .expect("overview")
+        .yields;
+    assert_eq!(history.len(), 1);
+    assert_eq!(history[0].id, yield_result.id);
+    assert_eq!(history[0].yield_cents, yield_result.yield_cents);
+    assert_eq!(
+        balance(&fixture, &pot).await,
+        110_000 + yield_result.yield_cents
+    );
 }

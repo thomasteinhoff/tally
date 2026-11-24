@@ -238,6 +238,7 @@ fn migrations() -> Migrations<'static> {
         M::up(include_str!(
             "../migrations/0005_savings_opening_balance.sql"
         )),
+        M::up(include_str!("../migrations/0006_savings_adjustment.sql")),
     ])
 }
 

@@ -167,18 +167,18 @@ impl AccountsRepository for SqliteAccountsRepository {
 
         self.db
             .transaction(move |transaction| {
-                let exists = transaction
+                let is_savings = transaction
                     .query_row(
-                        "SELECT 1 FROM accounts WHERE id = ?1 AND is_system = 0",
+                        "SELECT is_savings FROM accounts WHERE id = ?1 AND is_system = 0",
                         [&id],
                         |row| row.get::<_, i64>(0),
                     )
                     .optional()
                     .map_err(map_sqlite_error)?;
 
-                if exists.is_none() {
+                let Some(is_savings) = is_savings else {
                     return Err(AppError::not_found("conta não encontrada"));
-                }
+                };
 
                 let history = transaction
                     .query_row(
@@ -192,9 +192,11 @@ impl AccountsRepository for SqliteAccountsRepository {
                     .map_err(map_sqlite_error)?;
 
                 if history > 0 {
-                    return Err(AppError::conflict(
-                        "a conta possui movimentações; arquive em vez de excluir",
-                    ));
+                    return Err(AppError::conflict(if is_savings == 1 {
+                        "o cofrinho possui histórico (aplicações, resgates, ajustes ou rendimentos); arquive em vez de excluir. Rendimentos e estornos nunca são removidos."
+                    } else {
+                        "a conta possui movimentações; arquive em vez de excluir"
+                    }));
                 }
 
                 transaction

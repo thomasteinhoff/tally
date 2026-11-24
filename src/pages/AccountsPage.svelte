@@ -149,8 +149,11 @@
   }
 
   async function confirmDelete(account: AccountDto): Promise<void> {
+    const detail = account.is_savings
+      ? "Cofrinhos só podem ser excluídos com saldo inicial. Se houver aplicações, resgates, ajustes ou rendimentos, arquive em vez de excluir."
+      : "Só é permitido quando não há histórico. O saldo inicial e a conta serão removidos definitivamente.";
     const confirmed = await confirmAction(
-      `Excluir “${account.name}”? Só é permitido quando não há histórico. O saldo inicial e a conta serão removidos definitivamente.`,
+      `Excluir “${account.name}”? ${detail}`,
       "Excluir conta",
       "Excluir",
     );
