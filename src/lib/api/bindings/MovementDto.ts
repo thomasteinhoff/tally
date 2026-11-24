@@ -4,5 +4,10 @@
  * Movimentação simples exibida na lista. `amount_cents` é o impacto assinado
  * na conta principal: negativo para despesa/transferência de saída e para
  * ajustes negativos.
+ *
+ * `kind` é o tipo classificado: rendimentos e estornos de cofrinho aparecem
+ * como `savings_yield`/`savings_yield_reversal`, embora o entry no banco seja
+ * `adjustment`. As duas colunas de cofrinho identificam aplicações, resgates e
+ * ajustes que continuam com tipo comum.
  */
-export type MovementDto = { id: string, kind: string, occurred_on: string, occurred_time: string | null, manual_period: string | null, period: string | null, description: string | null, primary_account_id: string, primary_account_name: string, counterparty_account_id: string | null, counterparty_account_name: string | null, category_id: string | null, category_name: string | null, payment_method: string | null, amount_cents: number, created_at: string, installment_plan_id: string | null, installment_count: number | null, first_installment_cents: number | null, };
+export type MovementDto = { id: string, kind: string, occurred_on: string, occurred_time: string | null, manual_period: string | null, period: string | null, description: string | null, primary_account_id: string, primary_account_name: string, primary_account_is_savings: boolean, counterparty_account_id: string | null, counterparty_account_name: string | null, counterparty_account_is_savings: boolean, category_id: string | null, category_name: string | null, payment_method: string | null, amount_cents: number, created_at: string, installment_plan_id: string | null, installment_count: number | null, first_installment_cents: number | null, };

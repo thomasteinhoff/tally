@@ -175,6 +175,8 @@ const kindLabels: Record<string, string> = {
   opening_balance: "Saldo inicial",
   card_purchase: "Compra no cartão",
   card_payment: "Pagamento de cartão",
+  savings_yield: "Rendimento de cofrinho",
+  savings_yield_reversal: "Estorno de rendimento",
 };
 
 const paymentLabels: Record<string, string> = {

@@ -152,6 +152,11 @@ pub struct CreateCategoryInput {
 /// Movimentação simples exibida na lista. `amount_cents` é o impacto assinado
 /// na conta principal: negativo para despesa/transferência de saída e para
 /// ajustes negativos.
+///
+/// `kind` é o tipo classificado: rendimentos e estornos de cofrinho aparecem
+/// como `savings_yield`/`savings_yield_reversal`, embora o entry no banco seja
+/// `adjustment`. As duas colunas de cofrinho identificam aplicações, resgates e
+/// ajustes que continuam com tipo comum.
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
 #[ts(export, export_to = "../../../src/lib/api/bindings/")]
 pub struct MovementDto {
@@ -164,8 +169,10 @@ pub struct MovementDto {
     pub description: Option<String>,
     pub primary_account_id: String,
     pub primary_account_name: String,
+    pub primary_account_is_savings: bool,
     pub counterparty_account_id: Option<String>,
     pub counterparty_account_name: Option<String>,
+    pub counterparty_account_is_savings: bool,
     pub category_id: Option<String>,
     pub category_name: Option<String>,
     pub payment_method: Option<String>,

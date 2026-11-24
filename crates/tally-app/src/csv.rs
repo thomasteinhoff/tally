@@ -18,7 +18,7 @@ pub fn movements_csv(movements: &[MovementDto]) -> String {
             movement.occurred_on.clone(),
             movement.occurred_time.clone().unwrap_or_default(),
             period.to_owned(),
-            movement.kind.clone(),
+            kind_label(&movement.kind).to_owned(),
             description.to_owned(),
             movement.primary_account_name.clone(),
             counterparty.to_owned(),
@@ -40,6 +40,15 @@ pub fn movements_csv(movements: &[MovementDto]) -> String {
     }
 
     output
+}
+
+/// Rótulos estáveis no arquivo, independentes do texto da interface.
+fn kind_label(kind: &str) -> &str {
+    match kind {
+        "savings_yield" => "Rendimento de cofrinho",
+        "savings_yield_reversal" => "Estorno de rendimento",
+        other => other,
+    }
 }
 
 fn escape(value: &str) -> String {
@@ -87,8 +96,10 @@ mod tests {
             description: Some(description.to_owned()),
             primary_account_id: "account-1".to_owned(),
             primary_account_name: "Banco".to_owned(),
+            primary_account_is_savings: false,
             counterparty_account_id: None,
             counterparty_account_name: None,
+            counterparty_account_is_savings: false,
             category_id: Some("category-1".to_owned()),
             category_name: Some("Mercado".to_owned()),
             payment_method: Some("pix".to_owned()),
@@ -109,5 +120,19 @@ mod tests {
         assert!(csv.contains("\"Mercado; \"\"extra\"\"\nsegunda linha\""));
         assert!(csv.contains("-R$ 1.234,56;-123456;entry-1"));
         assert!(csv.ends_with("\r\n"));
+    }
+
+    #[test]
+    fn uses_stable_labels_for_savings_kinds() {
+        let mut yield_movement = movement("Rendimento");
+        yield_movement.kind = "savings_yield".to_owned();
+        let mut reversal = movement("Estorno");
+        reversal.kind = "savings_yield_reversal".to_owned();
+        reversal.id = "entry-2".to_owned();
+
+        let csv = movements_csv(&[yield_movement, reversal]);
+
+        assert!(csv.contains(";Rendimento de cofrinho;"));
+        assert!(csv.contains(";Estorno de rendimento;"));
     }
 }

@@ -24,7 +24,13 @@ const SELECT_ACCOUNT: &str = "
 ";
 
 const SELECT_MOVEMENT: &str = "
-    SELECT e.id, e.kind, e.occurred_on, e.occurred_time, e.manual_period, e.period,
+    SELECT e.id,
+           CASE
+               WHEN sy.entry_id = e.id THEN 'savings_yield'
+               WHEN sy.reversal_entry_id = e.id THEN 'savings_yield_reversal'
+               ELSE e.kind
+           END AS displayed_kind,
+           e.occurred_on, e.occurred_time, e.manual_period, e.period,
            e.description, e.primary_account_id, pa.name,
            e.counterparty_account_id, ca.name, e.category_id, c.name,
            e.payment_method,
@@ -39,19 +45,18 @@ const SELECT_MOVEMENT: &str = "
             FROM installments i
             WHERE i.plan_id = ip.id
             ORDER BY i.seq
-            LIMIT 1) AS first_installment_cents
+            LIMIT 1) AS first_installment_cents,
+           pa.is_savings, COALESCE(ca.is_savings, 0)
     FROM journal_entries e
     JOIN accounts pa ON pa.id = e.primary_account_id
     LEFT JOIN accounts ca ON ca.id = e.counterparty_account_id
     LEFT JOIN categories c ON c.id = e.category_id
     LEFT JOIN installment_plans ip ON ip.purchase_entry_id = e.id
+    LEFT JOIN savings_yields sy
+           ON sy.entry_id = e.id OR sy.reversal_entry_id = e.id
     WHERE e.posted_at IS NOT NULL AND e.kind <> 'opening_balance'
       AND NOT EXISTS (
           SELECT 1 FROM installments i WHERE i.recognition_entry_id = e.id
-      )
-      AND NOT EXISTS (
-          SELECT 1 FROM savings_yields sy
-          WHERE sy.entry_id = e.id OR sy.reversal_entry_id = e.id
       )
 ";
 
@@ -198,7 +203,7 @@ impl MovementsRepository for SqliteMovementsRepository {
             "{SELECT_MOVEMENT}
              AND (?1 IS NULL OR e.primary_account_id = ?1 OR e.counterparty_account_id = ?1)
              AND (?2 IS NULL OR e.category_id = ?2)
-             AND (?3 IS NULL OR e.kind = ?3)
+             AND (?3 IS NULL OR displayed_kind = ?3)
              AND (?4 IS NULL OR e.period = ?4)
              AND (?5 IS NULL OR e.payment_method = ?5)
              AND (?6 IS NULL OR e.occurred_on >= ?6)
@@ -691,6 +696,8 @@ fn map_movement_row(row: &Row<'_>) -> rusqlite::Result<MovementDto> {
         installment_plan_id: row.get(16)?,
         installment_count: row.get(17)?,
         first_installment_cents: row.get(18)?,
+        primary_account_is_savings: row.get::<_, i64>(19)? == 1,
+        counterparty_account_is_savings: row.get::<_, i64>(20)? == 1,
     })
 }
 

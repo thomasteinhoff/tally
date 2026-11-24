@@ -670,8 +670,9 @@
       <div class="panel-footnote">
         <span class="mono">vazio</span>
         <span>
-          Sem filtros, todas as movimentações são exportadas; os campos seguem
-          o mesmo filtro das movimentações.
+          Sem filtros, todas as movimentações são exportadas, incluindo
+          aplicações, resgates, ajustes e rendimentos de cofrinhos; os campos
+          seguem o mesmo filtro das movimentações.
         </span>
       </div>
     </footer>

@@ -1,12 +1,13 @@
 <script lang="ts">
   import { createQuery, useQueryClient } from "@tanstack/svelte-query";
 
-  import type { SavingsYieldDto } from "../lib/api/bindings";
+  import type { MovementFilter, SavingsYieldDto } from "../lib/api/bindings";
   import {
     createSavingsYield,
     createTransfer,
     getSavingsOverview,
     listAccounts,
+    listMovements,
     replaceSavingsYield,
     reverseSavingsYield,
   } from "../lib/api";
@@ -16,6 +17,7 @@
     currentTime,
     formatCents,
     formatDate,
+    kindLabel,
     parseAmountToCents,
     todayIso,
   } from "../lib/format";
@@ -44,9 +46,24 @@
     queryFn: () => listAccounts(true),
   }));
 
+  const accountFilter = $derived<MovementFilter>({
+    account_id: accountId,
+    category_id: null,
+    kind: null,
+    period: null,
+    payment_method: null,
+    from: null,
+    to: null,
+  });
+  const historyQuery = createQuery(() => ({
+    queryKey: ["movements", accountFilter],
+    queryFn: () => listMovements(accountFilter),
+  }));
+
   const overview = $derived(overviewQuery.data);
   const account = $derived(overview?.account);
   const yields = $derived(overview?.yields ?? []);
+  const history = $derived(historyQuery.data ?? []);
   const archived = $derived(Boolean(account?.archived_at));
   const regularAccounts = $derived(
     (accountsQuery.data ?? []).filter(
@@ -152,7 +169,8 @@
     <p>
       Rendimento diário sobre o saldo no início do dia. Aplicações e resgates
       são transferências com uma conta convencional; rendimentos e estornos
-      ficam de fora de Movimentações, receitas, despesas e fluxo de caixa.
+      aparecem em Movimentações com tipo próprio e continuam fora de receitas,
+      despesas e fluxo de caixa.
     </p>
   </div>
   <button
@@ -429,6 +447,47 @@
             receitas, despesas ou fluxo de caixa.
           </span>
         </div>
+      </div>
+    {/if}
+  </section>
+
+  <section class="panel" aria-labelledby="savings-history-title">
+    <header class="panel-header">
+      <div class="panel-heading">
+        <span class="panel-kicker">Livro</span>
+        <h3 class="panel-title" id="savings-history-title">Histórico do cofrinho</h3>
+      </div>
+      <span class="panel-meta">{history.length} lançamentos</span>
+    </header>
+
+    {#if history.length === 0}
+      <div class="empty-panel">
+        <p>Nenhum lançamento neste cofrinho.</p>
+      </div>
+    {:else}
+      <div class="table-wrap">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th scope="col">Data</th>
+              <th scope="col">Tipo</th>
+              <th scope="col">Descrição</th>
+              <th scope="col" class="align-right">Valor</th>
+            </tr>
+          </thead>
+          <tbody>
+            {#each history as movement (movement.id)}
+              <tr>
+                <td>{formatDate(movement.occurred_on)}</td>
+                <td><span class="tag">{kindLabel(movement.kind)}</span></td>
+                <td>{movement.description ?? "—"}</td>
+                <td class="mono align-right">
+                  {formatCents(movement.amount_cents)}
+                </td>
+              </tr>
+            {/each}
+          </tbody>
+        </table>
       </div>
     {/if}
   </section>

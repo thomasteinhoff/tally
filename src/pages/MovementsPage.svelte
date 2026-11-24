@@ -223,8 +223,9 @@
     <span class="eyebrow">Livro</span>
     <h2>Movimentações</h2>
     <p>
-      Despesas, receitas, transferências, ajustes, compras e pagamentos de
-      cartão em um único fluxo, publicados em partidas dobradas.
+      Despesas, receitas, transferências, ajustes, compras, pagamentos de
+      cartão e operações de cofrinho em um único fluxo, publicados em partidas
+      dobradas.
     </p>
   </div>
   <button type="button" class="button button--primary" onclick={openNew}>
@@ -280,6 +281,8 @@
         <option value="income">Receita</option>
         <option value="transfer">Transferência</option>
         <option value="adjustment">Ajuste</option>
+        <option value="savings_yield">Rendimento de cofrinho</option>
+        <option value="savings_yield_reversal">Estorno de rendimento</option>
       </select>
     </label>
 
@@ -408,6 +411,9 @@
                   <a class="text-link" href={primaryAccountHref(movement)}>
                     {movement.primary_account_name}
                   </a>
+                  {#if movement.primary_account_is_savings}
+                    <small class="mono">cofrinho</small>
+                  {/if}
                   {#if movement.counterparty_account_id && movement.counterparty_account_name}
                     <small>
                       → <a
@@ -416,6 +422,9 @@
                       >
                         {movement.counterparty_account_name}
                       </a>
+                      {#if movement.counterparty_account_is_savings}
+                        <small class="mono">cofrinho</small>
+                      {/if}
                     </small>
                   {/if}
                 </div>

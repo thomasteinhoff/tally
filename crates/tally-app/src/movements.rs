@@ -461,6 +461,11 @@ fn normalize_filter(filter: Option<MovementFilter>) -> Result<MovementFilter, Ap
         .map(str::trim)
         .filter(|value| !value.is_empty())
         .map(|value| {
+            // Tipos classificados só existem na leitura da listagem/CSV; não
+            // são `MovementKind` gravável.
+            if matches!(value, "savings_yield" | "savings_yield_reversal") {
+                return Ok(value.to_owned());
+            }
             MovementKind::parse(value)
                 .map(|kind| kind.as_str().to_owned())
                 .ok_or_else(|| AppError::validation("tipo de movimentação inválido"))
@@ -563,8 +568,10 @@ mod tests {
                 description: movement.description,
                 primary_account_id: movement.primary_account_id,
                 primary_account_name: "Banco".to_owned(),
+                primary_account_is_savings: false,
                 counterparty_account_id: None,
                 counterparty_account_name: None,
+                counterparty_account_is_savings: false,
                 category_id: movement.category_id,
                 category_name: Some("Mercado".to_owned()),
                 payment_method: movement

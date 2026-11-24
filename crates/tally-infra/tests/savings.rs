@@ -5,7 +5,7 @@ use tally_app::{
     CreateCardPaymentInput, CreateCategoryInput, CreateExpenseInput, CreateIncomeInput,
     CreateSavingsYieldInput, CreateTransferInput, MovementFilter, MovementsService,
     ReplaceSavingsYieldInput, ReportFilter, ReportsService, ReverseSavingsYieldInput,
-    SavingsService, UpdateMovementInput,
+    SavingsService, UpdateMovementInput, movements_csv,
 };
 use tally_infra::{
     Database, SqliteAccountsRepository, SqliteCardsRepository, SqliteCategoriesRepository,
@@ -151,7 +151,7 @@ fn report_filter() -> ReportFilter {
 }
 
 #[tokio::test]
-async fn yield_uses_beginning_of_day_balance_and_stays_out_of_movements() {
+async fn yield_uses_beginning_of_day_balance_and_appears_in_movements() {
     let fixture = fixture().await;
     let bank = account(&fixture, "Banco", 500_000).await;
     let pot = savings(&fixture, "Cofrinho", "calendar", 100.0).await;
@@ -175,8 +175,140 @@ async fn yield_uses_beginning_of_day_balance_and_stays_out_of_movements() {
         .list(Some(movement_filter()))
         .await
         .expect("movements");
-    assert!(movements.iter().all(|item| item.id != result.entry_id));
-    assert_eq!(movements.len(), 2);
+    assert_eq!(movements.len(), 3);
+    let listed = movements
+        .iter()
+        .find(|item| item.id == result.entry_id)
+        .expect("rendimento na listagem");
+    assert_eq!(listed.kind, "savings_yield");
+    assert!(listed.primary_account_is_savings);
+    assert!(!listed.counterparty_account_is_savings);
+    assert_eq!(listed.amount_cents, result.yield_cents);
+}
+
+#[tokio::test]
+async fn savings_operations_are_classified_filtered_and_exported_once() {
+    let fixture = fixture().await;
+    let bank = account(&fixture, "Banco", 500_000).await;
+    let pot = savings(&fixture, "Cofrinho", "calendar", 100.0).await;
+
+    transfer(&fixture, &bank, &pot, 100_000, "2026-11-02").await;
+    fixture
+        .movements
+        .create_adjustment(CreateAdjustmentInput {
+            account_id: pot.clone(),
+            amount_cents: 10_000,
+            occurred_on: "2026-11-03".to_owned(),
+            description: None,
+        })
+        .await
+        .expect("adjustment");
+    let yield_result = yield_at(&fixture, &pot, "2026-11-04").await;
+    let reversal = fixture
+        .savings
+        .reverse_yield(ReverseSavingsYieldInput {
+            yield_id: yield_result.id.clone(),
+            as_of: "2026-11-05".to_owned(),
+        })
+        .await
+        .expect("reversal");
+
+    let movements = fixture
+        .movements
+        .list(Some(movement_filter()))
+        .await
+        .expect("movements");
+    assert_eq!(movements.len(), 4);
+
+    let applied = movements
+        .iter()
+        .find(|item| item.kind == "transfer")
+        .expect("application");
+    assert!(!applied.primary_account_is_savings);
+    assert!(applied.counterparty_account_is_savings);
+    let adjustment = movements
+        .iter()
+        .find(|item| item.kind == "adjustment")
+        .expect("adjustment");
+    assert!(adjustment.primary_account_is_savings);
+
+    let listed_yield = movements
+        .iter()
+        .find(|item| item.kind == "savings_yield")
+        .expect("yield");
+    assert_eq!(listed_yield.id, yield_result.entry_id);
+    assert!(listed_yield.primary_account_is_savings);
+    let listed_reversal = movements
+        .iter()
+        .find(|item| item.kind == "savings_yield_reversal")
+        .expect("reversal entry");
+    assert_eq!(
+        listed_reversal.id,
+        reversal
+            .reversal_entry_id
+            .clone()
+            .expect("reversal entry id")
+    );
+
+    for (kind, expected) in [
+        ("savings_yield", 1),
+        ("savings_yield_reversal", 1),
+        ("adjustment", 1),
+        ("transfer", 1),
+    ] {
+        let filtered = fixture
+            .movements
+            .list(Some(MovementFilter {
+                kind: Some(kind.to_owned()),
+                ..movement_filter()
+            }))
+            .await
+            .expect("filtered movements");
+        assert_eq!(filtered.len(), expected, "filtro {kind}");
+        assert!(filtered.iter().all(|item| item.kind == kind));
+    }
+
+    let from_savings = fixture
+        .movements
+        .list(Some(MovementFilter {
+            account_id: Some(pot.clone()),
+            ..movement_filter()
+        }))
+        .await
+        .expect("savings movements");
+    assert_eq!(from_savings.len(), 4);
+
+    let failed_edit = fixture
+        .movements
+        .update(
+            &yield_result.entry_id,
+            UpdateMovementInput {
+                kind: "adjustment".to_owned(),
+                primary_account_id: pot.clone(),
+                counterparty_account_id: None,
+                category_id: None,
+                amount_cents: 10_000,
+                occurred_on: "2026-11-04".to_owned(),
+                occurred_time: None,
+                manual_period: None,
+                description: None,
+                payment_method: None,
+            },
+        )
+        .await;
+    assert!(matches!(failed_edit, Err(AppError::Conflict { .. })));
+    assert!(matches!(
+        fixture.movements.delete(&yield_result.entry_id).await,
+        Err(AppError::Conflict { .. })
+    ));
+
+    let csv = movements_csv(&movements);
+    assert_eq!(csv.lines().count(), 5);
+    assert!(csv.contains(";Rendimento de cofrinho;"));
+    assert!(csv.contains(";Estorno de rendimento;"));
+    for movement in &movements {
+        assert_eq!(csv.matches(&movement.id).count(), 1, "CSV duplicou a linha");
+    }
 }
 
 #[tokio::test]
