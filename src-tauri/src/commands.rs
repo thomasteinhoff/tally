@@ -1,20 +1,20 @@
 use tally_app::{
     AccountDto, AccountStatementDto, AccountsService, AppError, BackupDto, BootstrapDto,
     BootstrapService, CardPaymentDto, CardSummaryDto, CardsService, CashFlowReportDto,
-    CategoriesService, CategoryDto, CategoryReportDto, CommitmentsReportDto, CreateAccountInput,
-    CreateAdjustmentInput, CreateCardPaymentInput, CreateCardPurchaseInput, CreateCategoryInput,
-    CreateExpenseInput, CreateIncomeInput, CreateSavingsYieldInput, CreateTransferInput,
-    CsvExportDto, DashboardDto, ExpenseTrendDto, ExportCsvInput, InstallmentPlanDto,
-    IntegrityReportDto, MovementDto, MovementFilter, MovementsService, NetWorthHistoryDto,
-    NetWorthReportDto, PeriodSpendingReportDto, ReplaceSavingsYieldInput, ReportFilter,
-    ReportsService, RestoreResultDto, ReverseSavingsYieldInput, SavingsOverviewDto, SavingsService,
-    SavingsYieldDto, SettingsDto, UpdateInstallmentPlanInput, UpdateMovementInput,
-    UpdateSettingsInput,
+    CategoriesService, CategoryDto, CategoryReportDto, CdiService, CdiStatusDto,
+    CommitmentsReportDto, CreateAccountInput, CreateAdjustmentInput, CreateCardPaymentInput,
+    CreateCardPurchaseInput, CreateCategoryInput, CreateExpenseInput, CreateIncomeInput,
+    CreateSavingsYieldInput, CreateTransferInput, CsvExportDto, DashboardDto, ExpenseTrendDto,
+    ExportCsvInput, InstallmentPlanDto, IntegrityReportDto, MovementDto, MovementFilter,
+    MovementsService, NetWorthHistoryDto, NetWorthReportDto, PeriodSpendingReportDto,
+    ReplaceSavingsYieldInput, ReportFilter, ReportsService, RestoreResultDto,
+    ReverseSavingsYieldInput, SavingsOverviewDto, SavingsService, SavingsYieldDto, SettingsDto,
+    UpdateInstallmentPlanInput, UpdateMovementInput, UpdateSettingsInput,
 };
 use tally_infra::{
-    DataTools, Database, SqliteAccountsRepository, SqliteBootstrapRepository,
-    SqliteCardsRepository, SqliteCategoriesRepository, SqliteMovementsRepository,
-    SqliteReportsRepository, SqliteSavingsRepository,
+    DataTools, Database, HttpCdiRateSource, SqliteAccountsRepository, SqliteBootstrapRepository,
+    SqliteCardsRepository, SqliteCategoriesRepository, SqliteCdiRepository,
+    SqliteMovementsRepository, SqliteReportsRepository, SqliteSavingsRepository,
 };
 use tauri::State;
 
@@ -67,6 +67,16 @@ fn reports_service(state: &AppState) -> Result<ReportsService<SqliteReportsRepos
 fn savings_service(state: &AppState) -> Result<SavingsService<SqliteSavingsRepository>, AppError> {
     let db = database(state)?;
     Ok(SavingsService::new(SqliteSavingsRepository::new(db)))
+}
+
+fn cdi_service(
+    state: &AppState,
+) -> Result<CdiService<SqliteCdiRepository, HttpCdiRateSource>, AppError> {
+    let db = database(state)?;
+    Ok(CdiService::new(
+        SqliteCdiRepository::new(db),
+        HttpCdiRateSource::new(),
+    ))
 }
 
 fn data_tools(state: &AppState) -> Result<DataTools, AppError> {
@@ -193,6 +203,19 @@ pub async fn replace_savings_yield(
     input: ReplaceSavingsYieldInput,
 ) -> Result<SavingsYieldDto, AppError> {
     savings_service(state.inner())?.replace_yield(input).await
+}
+
+#[tauri::command]
+pub async fn get_cdi_status(state: State<'_, AppState>) -> Result<CdiStatusDto, AppError> {
+    cdi_service(state.inner())?.status().await
+}
+
+#[tauri::command]
+pub async fn refresh_cdi_rates(
+    state: State<'_, AppState>,
+    from: Option<String>,
+) -> Result<CdiStatusDto, AppError> {
+    cdi_service(state.inner())?.refresh(from.as_deref()).await
 }
 
 #[tauri::command]

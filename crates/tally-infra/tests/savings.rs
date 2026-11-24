@@ -858,7 +858,7 @@ async fn migration_0005_repairs_legacy_trigger_for_savings_opening_balance() {
         })
         .await
         .expect("schema should be readable");
-    assert_eq!(version, 6);
+    assert_eq!(version, 7);
     assert!(trigger_sql.contains("NEW.kind <> 'opening_balance'"));
     assert!(trigger_sql.contains("NEW.kind <> 'adjustment'"));
 

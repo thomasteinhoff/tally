@@ -239,6 +239,7 @@ fn migrations() -> Migrations<'static> {
             "../migrations/0005_savings_opening_balance.sql"
         )),
         M::up(include_str!("../migrations/0006_savings_adjustment.sql")),
+        M::up(include_str!("../migrations/0007_cdi_rates.sql")),
     ])
 }
 

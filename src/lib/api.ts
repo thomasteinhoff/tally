@@ -10,6 +10,7 @@ import type {
   CashFlowReportDto,
   CategoryDto,
   CategoryReportDto,
+  CdiStatusDto,
   CommitmentsReportDto,
   CreateAccountInput,
   CreateAdjustmentInput,
@@ -104,6 +105,14 @@ export function replaceSavingsYield(
   input: ReplaceSavingsYieldInput,
 ): Promise<SavingsYieldDto> {
   return invoke<SavingsYieldDto>("replace_savings_yield", { input });
+}
+
+export function getCdiStatus(): Promise<CdiStatusDto> {
+  return invoke<CdiStatusDto>("get_cdi_status");
+}
+
+export function refreshCdiRates(from?: string): Promise<CdiStatusDto> {
+  return invoke<CdiStatusDto>("refresh_cdi_rates", { from: from ?? null });
 }
 
 export function listCategories(

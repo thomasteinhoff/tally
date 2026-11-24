@@ -1,13 +1,19 @@
 <script lang="ts">
   import { createQuery, useQueryClient } from "@tanstack/svelte-query";
 
-  import type { MovementFilter, SavingsYieldDto } from "../lib/api/bindings";
+  import type {
+    CdiStatusDto,
+    MovementFilter,
+    SavingsYieldDto,
+  } from "../lib/api/bindings";
   import {
     createSavingsYield,
     createTransfer,
+    getCdiStatus,
     getSavingsOverview,
     listAccounts,
     listMovements,
+    refreshCdiRates,
     replaceSavingsYield,
     reverseSavingsYield,
   } from "../lib/api";
@@ -35,6 +41,16 @@
   let transferDescription = $state("");
   let localError = $state<string | null>(null);
   let busy = $state(false);
+  let cdiFrom = $state("");
+  let cdiStatus = $state<CdiStatusDto | null>(null);
+  let cdiLoading = $state(false);
+  let cdiError = $state<string | null>(null);
+
+  // A leitura do cache é local; nenhuma requisição acontece na abertura.
+  const cdiQuery = createQuery(() => ({
+    queryKey: ["cdi", "status"],
+    queryFn: getCdiStatus,
+  }));
 
   const overviewQuery = createQuery(() => ({
     queryKey: ["savings", accountId],
@@ -64,6 +80,11 @@
   const account = $derived(overview?.account);
   const yields = $derived(overview?.yields ?? []);
   const history = $derived(historyQuery.data ?? []);
+  const cdi = $derived(cdiStatus ?? cdiQuery.data ?? null);
+  const cdiStale = $derived(
+    cdi !== null &&
+      (cdi.rate_count === 0 || cdi.last_error !== null || cdi.last_success_at === null),
+  );
   const archived = $derived(Boolean(account?.archived_at));
   const regularAccounts = $derived(
     (accountsQuery.data ?? []).filter(
@@ -89,6 +110,21 @@
       notify(localError, "warn");
     } finally {
       busy = false;
+    }
+  }
+
+  async function refreshCdi(): Promise<void> {
+    cdiLoading = true;
+    cdiError = null;
+    try {
+      cdiStatus = await refreshCdiRates(cdiFrom.trim() || undefined);
+      notify("Taxas CDI atualizadas.");
+      await queryClient.invalidateQueries({ queryKey: ["cdi", "status"] });
+    } catch (error) {
+      cdiError = normalizeError(error).message;
+      notify(cdiError, "warn");
+    } finally {
+      cdiLoading = false;
     }
   }
 
@@ -222,6 +258,62 @@
     </div>
   </section>
 {:else}
+  <section class="panel" aria-labelledby="cdi-status-title">
+    <header class="panel-header">
+      <div class="panel-heading">
+        <span class="panel-kicker">SGS 12</span>
+        <h3 class="panel-title" id="cdi-status-title">Taxas CDI</h3>
+      </div>
+      <span class="panel-meta">
+        {cdi ? `${cdi.rate_count} taxas` : "carregando"}
+      </span>
+    </header>
+    <div class="panel-body">
+      <p>
+        {#if cdi && cdi.last_rate_date}
+          Última publicação em {formatDate(cdi.last_rate_date)}.
+        {:else}
+          Nenhuma taxa em cache. O rendimento usa apenas taxas locais.
+        {/if}
+      </p>
+      {#if cdiStale}
+        <div class="inline-result inline-result--warn" role="status">
+          <span>
+            {cdi?.last_error
+              ? `Última atualização falhou: ${cdi.last_error}. `
+              : "Cache desatualizado. "}
+            As taxas em cache continuam disponíveis; use “Atualizar taxas” quando
+            houver conexão.
+          </span>
+        </div>
+      {/if}
+      {#if cdiError}
+        <div class="inline-result inline-result--warn" role="alert">
+          <span>{cdiError}</span>
+        </div>
+      {/if}
+      <div class="filters">
+        <label class="field">
+          <span>Data inicial (opcional)</span>
+          <input type="date" bind:value={cdiFrom} max={todayIso()} />
+        </label>
+        <button
+          type="button"
+          class="button button--primary"
+          disabled={cdiLoading}
+          onclick={() => void refreshCdi()}
+        >
+          {cdiLoading ? "Atualizando…" : "Atualizar taxas"}
+        </button>
+      </div>
+      <p class="panel-footnote">
+        Somente o identificador da série (12) e o intervalo de datas são
+        enviados ao Banco Central. Nenhum dado financeiro ou pessoal sai do
+        aplicativo.
+      </p>
+    </div>
+  </section>
+
   <section class="summary-strip" aria-label="Resumo do cofrinho">
     <div>
       <span class="data-label">Saldo do cofrinho</span>

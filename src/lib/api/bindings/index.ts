@@ -11,6 +11,7 @@ export type { CashFlowReportDto } from "./CashFlowReportDto";
 export type { CategoryDto } from "./CategoryDto";
 export type { CategoryReportDto } from "./CategoryReportDto";
 export type { CategoryTotalDto } from "./CategoryTotalDto";
+export type { CdiStatusDto } from "./CdiStatusDto";
 export type { CommitmentDto } from "./CommitmentDto";
 export type { CommitmentMonthDto } from "./CommitmentMonthDto";
 export type { CommitmentsReportDto } from "./CommitmentsReportDto";

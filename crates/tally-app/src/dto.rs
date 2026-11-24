@@ -121,6 +121,20 @@ pub struct ReplaceSavingsYieldInput {
     pub yield_id: String,
 }
 
+/// Estado do cache local de taxas CDI (SGS 12).
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[ts(export, export_to = "../../../src/lib/api/bindings/")]
+pub struct CdiStatusDto {
+    pub series: String,
+    #[ts(type = "number")]
+    pub rate_count: i64,
+    pub first_rate_date: Option<String>,
+    pub last_rate_date: Option<String>,
+    pub last_success_at: Option<String>,
+    pub last_attempt_at: Option<String>,
+    pub last_error: Option<String>,
+}
+
 /// Histórico completo de rendimentos e estornos da tela do cofrinho.
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
 #[ts(export, export_to = "../../../src/lib/api/bindings/")]

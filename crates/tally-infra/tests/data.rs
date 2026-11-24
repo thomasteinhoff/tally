@@ -346,7 +346,7 @@ async fn restores_a_legacy_backup_and_applies_pending_migrations() {
         .call(|connection| connection.query_row("PRAGMA user_version", [], |row| row.get(0)))
         .await
         .expect("version");
-    assert_eq!(version, 6);
+    assert_eq!(version, 7);
 
     let has_column: i64 = fixture
         .db
