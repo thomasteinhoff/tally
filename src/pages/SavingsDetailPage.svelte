@@ -25,6 +25,7 @@
     formatDate,
     kindLabel,
     parseAmountToCents,
+    tenYearsAgoIso,
     todayIso,
   } from "../lib/format";
   import { notify } from "../lib/toast.svelte";
@@ -128,7 +129,11 @@
       notify("Taxas CDI atualizadas.");
       await queryClient.invalidateQueries({ queryKey: ["cdi", "status"] });
     } catch (error) {
+      // O toast traz a mensagem curta; o painel mostrará o erro persistido
+      // (com detalhes técnicos) depois da invalidação abaixo.
       cdiError = normalizeError(error).message;
+      cdiStatus = null;
+      await queryClient.invalidateQueries({ queryKey: ["cdi", "status"] });
       notify(cdiError, "warn");
     } finally {
       cdiLoading = false;
@@ -286,23 +291,31 @@
       {#if cdiStale}
         <div class="inline-result inline-result--warn" role="status">
           <span>
-            {cdi?.last_error
-              ? `Última atualização falhou: ${cdi.last_error}. `
-              : "Cache desatualizado. "}
-            As taxas em cache continuam disponíveis; use “Atualizar taxas” quando
-            houver conexão.
+            {#if cdi?.last_error}
+              Última atualização falhou: {cdi.last_error}.
+              {#if cdi.rate_count > 0}
+                As taxas em cache continuam disponíveis; use “Atualizar taxas”
+                quando houver conexão.
+              {:else}
+                Nenhuma taxa em cache; tente novamente quando o SGS estiver
+                disponível.
+              {/if}
+            {:else}
+              Cache desatualizado. As taxas em cache continuam disponíveis; use
+              “Atualizar taxas” quando houver conexão.
+            {/if}
           </span>
-        </div>
-      {/if}
-      {#if cdiError}
-        <div class="inline-result inline-result--warn" role="alert">
-          <span>{cdiError}</span>
         </div>
       {/if}
       <div class="filters">
         <label class="field">
           <span>Data inicial (opcional)</span>
-          <input type="date" bind:value={cdiFrom} max={todayIso()} />
+          <input
+            type="date"
+            bind:value={cdiFrom}
+            min={tenYearsAgoIso()}
+            max={todayIso()}
+          />
         </label>
         <button
           type="button"
@@ -315,8 +328,9 @@
       </div>
       <p class="panel-footnote">
         Somente o identificador da série (12) e o intervalo de datas são
-        enviados ao Banco Central. Nenhum dado financeiro ou pessoal sai do
-        aplicativo.
+        enviados ao Banco Central. O SGS limita consultas diárias a 10 anos; sem
+        data informada, os últimos 10 anos são buscados. Nenhum dado financeiro
+        ou pessoal sai do aplicativo.
       </p>
     </div>
   </section>

@@ -12,6 +12,8 @@ import {
   parseAmountToCents,
   periodLabel,
   periodRangeLabel,
+  tenYearsAgoIso,
+  todayIso,
 } from "./format";
 
 describe("formatCents", () => {
@@ -95,6 +97,13 @@ describe("formatação de apoio", () => {
     expect(periodRangeLabel("noite")).toBe("Noite (19:00–23:59)");
     expect(periodRangeLabel("custom")).toBe("Personalizado");
     expect(periodRangeLabel(null)).toBe("—");
+  });
+
+  it("expõe hoje e o limite de 10 anos do SGS no formato ISO", () => {
+    const now = new Date();
+    expect(todayIso()).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+    expect(tenYearsAgoIso()).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+    expect(tenYearsAgoIso().slice(0, 4)).toBe(String(now.getFullYear() - 10));
   });
 
   it("combina disponível e limite do cartão", () => {

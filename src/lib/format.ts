@@ -124,6 +124,15 @@ export function todayIso(): string {
   return `${now.getFullYear()}-${month}-${day}`;
 }
 
+/** Limite inferior aceito pelo SGS para séries diárias (10 anos). */
+export function tenYearsAgoIso(): string {
+  const date = new Date();
+  date.setFullYear(date.getFullYear() - 10);
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${date.getFullYear()}-${month}-${day}`;
+}
+
 export function currentTime(): string {
   const now = new Date();
   return `${String(now.getHours()).padStart(2, "0")}:${String(
