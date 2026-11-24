@@ -86,6 +86,13 @@ pub struct SavingsYieldDto {
     #[ts(type = "number")]
     pub contracted_percent_bps: i64,
     pub daily_rate: f64,
+    /// Data da publicação usada; `null` em snapshots gravados antes do CDI real.
+    pub rate_date: Option<String>,
+    /// Sempre `12` nos snapshots novos.
+    pub rate_series: Option<String>,
+    /// Taxa diária em fração decimal, copiada do cache no momento do cálculo.
+    pub cdi_daily_rate: Option<f64>,
+    pub rate_fetched_at: Option<String>,
     #[ts(type = "number")]
     pub days: i64,
     #[ts(type = "number")]

@@ -2,7 +2,7 @@ use async_trait::async_trait;
 use rusqlite::{OptionalExtension, Row, params};
 use tally_app::dto::{AccountDto, SavingsYieldDto};
 use tally_app::error::AppError;
-use tally_app::savings::{NewSavingsReversal, NewSavingsYield, SavingsRepository};
+use tally_app::savings::{CDI_SERIES, NewSavingsReversal, NewSavingsYield, SavingsRepository};
 use uuid::Uuid;
 
 use crate::db::{Database, map_sqlite_error};
@@ -27,7 +27,8 @@ const SELECT_ACCOUNT: &str = "
 const SELECT_YIELD: &str = "
     SELECT sy.id, sy.account_id, sy.as_of, sy.mode, sy.cdi_annual_bps,
            sy.contracted_percent_bps, sy.daily_rate, sy.days, sy.base_cents,
-           sy.yield_cents, sy.status, sy.entry_id, sy.reversal_entry_id, sy.created_at
+           sy.yield_cents, sy.status, sy.entry_id, sy.reversal_entry_id, sy.created_at,
+           sy.rate_date, sy.rate_series, sy.cdi_daily_rate, sy.rate_fetched_at
     FROM savings_yields sy
 ";
 
@@ -174,6 +175,12 @@ impl SavingsRepository for SqliteSavingsRepository {
     }
 }
 
+/// A coluna legada `cdi_annual_bps` guarda a taxa anual equivalente à taxa
+/// diária publicada, capitalizada na base de 252 dias úteis.
+fn cdi_annual_bps(daily_rate: f64) -> i64 {
+    ((1.0 + daily_rate).powf(252.0) - 1.0).mul_add(10_000.0, 0.5) as i64
+}
+
 fn insert_yield(
     transaction: &rusqlite::Transaction<'_>,
     snapshot: NewSavingsYield,
@@ -185,25 +192,31 @@ fn insert_yield(
             "INSERT INTO savings_yields (
                 id, account_id, as_of, mode, cdi_annual_bps,
                 contracted_percent_bps, daily_rate, days, base_cents,
-                yield_cents, status, entry_id, created_at, updated_at
+                yield_cents, status, entry_id, created_at, updated_at,
+                rate_date, rate_series, cdi_daily_rate, rate_fetched_at
              ) VALUES (
                 ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9,
                 ?10, 'confirmed', ?11,
                 strftime('%Y-%m-%dT%H:%M:%fZ', 'now'),
-                strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+                strftime('%Y-%m-%dT%H:%M:%fZ', 'now'),
+                ?12, ?13, ?14, ?15
              )",
             params![
                 snapshot.id,
                 snapshot.account_id,
                 snapshot.as_of,
                 snapshot.mode.as_str(),
-                snapshot.cdi_annual_bps,
+                cdi_annual_bps(snapshot.daily_rate),
                 snapshot.contracted_percent_bps,
                 snapshot.daily_rate,
                 snapshot.days,
                 snapshot.base_cents,
                 snapshot.yield_cents,
                 snapshot.entry_id,
+                snapshot.rate.as_ref().map(|rate| rate.rate_date.as_str()),
+                snapshot.rate.as_ref().map(|_| CDI_SERIES),
+                snapshot.rate.as_ref().map(|rate| rate.daily_rate),
+                snapshot.rate.as_ref().map(|rate| rate.fetched_at.as_str()),
             ],
         )
         .map_err(map_sqlite_error)?;
@@ -358,6 +371,10 @@ fn map_yield_row(row: &Row<'_>) -> rusqlite::Result<SavingsYieldDto> {
         entry_id: row.get(11)?,
         reversal_entry_id: row.get(12)?,
         created_at: row.get(13)?,
+        rate_date: row.get(14)?,
+        rate_series: row.get(15)?,
+        cdi_daily_rate: row.get(16)?,
+        rate_fetched_at: row.get(17)?,
     })
 }
 

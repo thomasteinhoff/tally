@@ -2,19 +2,17 @@ use async_trait::async_trait;
 use chrono::{Datelike, Duration, Local, NaiveDate, Weekday};
 use uuid::Uuid;
 
+use crate::cdi;
 use crate::dto::{
     AccountDto, CreateSavingsYieldInput, ReplaceSavingsYieldInput, ReverseSavingsYieldInput,
     SavingsOverviewDto, SavingsYieldDto,
 };
 use crate::error::AppError;
+use crate::ports::{CdiRateSnapshot, CdiRatesRepository};
 use crate::validation::validate_not_future;
 
-/// CDI anual usado como referência, em pontos-base (1_000 = 10,00% a.a.).
-///
-/// ponytail: valor provisório e isolado aqui porque a taxa exata ainda depende
-/// de decisão de produto. Trocar esta única constante quando confirmada; os
-/// snapshots já gravados guardam a taxa usada e não são recalculados.
-pub const CDI_ANNUAL_BPS: i64 = 1_000;
+/// Série do Banco Central usada como fonte da taxa diária (SGS 12, `% p.d.`).
+pub const CDI_SERIES: &str = cdi::CDI_SERIES;
 
 const BPS_PER_UNIT: f64 = 10_000.0;
 const PERCENT_TO_BPS: f64 = 100.0;
@@ -44,13 +42,6 @@ impl YieldMode {
             "calendar" => Some(Self::Calendar),
             "business" => Some(Self::Business),
             _ => None,
-        }
-    }
-
-    const fn periods_per_year(self) -> f64 {
-        match self {
-            Self::Calendar => CALENDAR_DAYS_PER_YEAR,
-            Self::Business => BUSINESS_DAYS_PER_YEAR,
         }
     }
 }
@@ -102,16 +93,19 @@ pub fn normalize_savings_config(
     }))
 }
 
-/// Converte a taxa anual efetiva contratada em taxa diária equivalente.
+/// Fator de capitalização diário com a taxa publicada do CDI.
 ///
-/// A taxa anual contratada é `CDI anual × percentual`. A conversão é
-/// geométrica — `(1 + anual)^(1/n) - 1` — para que capitalizar `n` dias
-/// reproduza a taxa anual. Dividir a taxa anual por 365 ou 252 não é a
-/// mesma convenção e não deve ser usado aqui.
-pub fn daily_rate(mode: YieldMode, cdi_percent_bps: i64) -> f64 {
-    let annual_rate =
-        (CDI_ANNUAL_BPS as f64 / BPS_PER_UNIT) * (cdi_percent_bps as f64 / BPS_PER_UNIT);
-    (1.0 + annual_rate).powf(1.0 / mode.periods_per_year()) - 1.0
+/// `r` é a taxa diária da SGS 12 em fração decimal e `p = percentual / 10.000`.
+/// Em dias úteis, `f = 1 + r × p`. A modalidade `calendar` é uma aproximação
+/// matemática do Tally: distribui a mesma taxa em 365 dias corridos por
+/// `f = (1 + r × p)^(252/365)`. Não é uma convenção contratual de nenhum
+/// produto financeiro específico.
+pub fn growth_factor(mode: YieldMode, daily_rate: f64, cdi_percent_bps: i64) -> f64 {
+    let scaled = daily_rate * (cdi_percent_bps as f64 / BPS_PER_UNIT);
+    match mode {
+        YieldMode::Business => 1.0 + scaled,
+        YieldMode::Calendar => (1.0 + scaled).powf(BUSINESS_DAYS_PER_YEAR / CALENDAR_DAYS_PER_YEAR),
+    }
 }
 
 /// Resultado registrado no snapshot: todos os parâmetros necessários para
@@ -119,26 +113,31 @@ pub fn daily_rate(mode: YieldMode, cdi_percent_bps: i64) -> f64 {
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct YieldCalculation {
     pub mode: YieldMode,
-    pub cdi_annual_bps: i64,
     pub contracted_percent_bps: i64,
     pub daily_rate: f64,
+    pub factor: f64,
     pub days: i64,
     pub yield_cents: i64,
 }
 
 /// Rendimento de um dia sobre o saldo no início do dia.
 ///
-/// A taxa é contínua por natureza; o resultado é arredondado para centavos
-/// inteiros antes de virar `Money`. Nenhum valor de taxa entra no ledger.
-pub fn calculate_yield(base_cents: i64, mode: YieldMode, cdi_percent_bps: i64) -> YieldCalculation {
-    let rate = daily_rate(mode, cdi_percent_bps);
-    let yield_cents = ((base_cents as f64) * rate).round() as i64;
+/// O fator é calculado com a taxa publicada e arredondado para centavos inteiros
+/// antes de virar `Money`. Nenhum valor de taxa entra no ledger.
+pub fn calculate_yield(
+    base_cents: i64,
+    mode: YieldMode,
+    daily_rate: f64,
+    cdi_percent_bps: i64,
+) -> YieldCalculation {
+    let factor = growth_factor(mode, daily_rate, cdi_percent_bps);
+    let yield_cents = ((base_cents as f64) * (factor - 1.0)).round() as i64;
 
     YieldCalculation {
         mode,
-        cdi_annual_bps: CDI_ANNUAL_BPS,
         contracted_percent_bps: cdi_percent_bps,
-        daily_rate: rate,
+        daily_rate,
+        factor,
         days: 1,
         yield_cents,
     }
@@ -227,12 +226,13 @@ pub struct NewSavingsYield {
     pub account_id: String,
     pub as_of: String,
     pub mode: YieldMode,
-    pub cdi_annual_bps: i64,
     pub contracted_percent_bps: i64,
     pub daily_rate: f64,
     pub days: i64,
     pub base_cents: i64,
     pub yield_cents: i64,
+    /// Procedência da taxa; `None` apenas em snapshots antigos já gravados.
+    pub rate: Option<CdiRateSnapshot>,
     pub description: String,
 }
 
@@ -268,13 +268,14 @@ pub trait SavingsRepository: Send + Sync {
     async fn list_yields(&self, account_id: &str) -> Result<Vec<SavingsYieldDto>, AppError>;
 }
 
-pub struct SavingsService<R> {
+pub struct SavingsService<R, C> {
     repo: R,
+    cdi: C,
 }
 
-impl<R: SavingsRepository> SavingsService<R> {
-    pub fn new(repo: R) -> Self {
-        Self { repo }
+impl<R: SavingsRepository, C: CdiRatesRepository> SavingsService<R, C> {
+    pub fn new(repo: R, cdi: C) -> Self {
+        Self { repo, cdi }
     }
 
     pub async fn overview(&self, account_id: &str) -> Result<SavingsOverviewDto, AppError> {
@@ -390,7 +391,20 @@ impl<R: SavingsRepository> SavingsService<R> {
             ));
         }
 
-        let calculation = calculate_yield(base_cents, mode, percent_bps);
+        let rate = match mode {
+            YieldMode::Business => self.cdi.rate_on(&as_of).await?,
+            YieldMode::Calendar => self.cdi.rate_on_or_before(&as_of).await?,
+        }
+        .ok_or_else(|| match mode {
+            YieldMode::Business => AppError::validation(
+                "não há taxa CDI publicada para esta data; atualize as taxas no SGS 12",
+            ),
+            YieldMode::Calendar => AppError::validation(
+                "não há taxa CDI em cache para esta data ou anteriores; atualize as taxas",
+            ),
+        })?;
+
+        let calculation = calculate_yield(base_cents, mode, rate.daily_rate, percent_bps);
         if calculation.yield_cents <= 0 {
             return Err(AppError::validation("o rendimento calculado é zero"));
         }
@@ -402,12 +416,12 @@ impl<R: SavingsRepository> SavingsService<R> {
             account_id,
             as_of,
             mode: calculation.mode,
-            cdi_annual_bps: calculation.cdi_annual_bps,
             contracted_percent_bps: calculation.contracted_percent_bps,
             daily_rate: calculation.daily_rate,
             days: calculation.days,
             base_cents,
             yield_cents: calculation.yield_cents,
+            rate: Some(rate),
             description,
         })
     }
@@ -456,48 +470,55 @@ mod tests {
     use chrono::NaiveDate;
 
     use super::{
-        CDI_ANNUAL_BPS, YieldMode, calculate_yield, daily_rate, is_yield_day,
-        normalize_savings_config,
+        YieldMode, calculate_yield, growth_factor, is_yield_day, normalize_savings_config,
     };
+
+    /// Taxa real da SGS 12 em 19/11/2026: `0,050788% ao dia`.
+    const REAL_DAILY_RATE: f64 = 0.00050788;
 
     fn date(value: &str) -> NaiveDate {
         NaiveDate::parse_from_str(value, "%Y-%m-%d").expect("data válida")
     }
 
     #[test]
-    fn geometric_rate_reproduces_the_annual_rate_on_each_basis() {
-        let calendar = daily_rate(YieldMode::Calendar, 10_000);
-        let business = daily_rate(YieldMode::Business, 10_000);
+    fn published_rate_matches_official_sgs_12_cross_check() {
+        let factor = growth_factor(YieldMode::Business, REAL_DAILY_RATE, 10_000);
+        let annual = factor.powf(252.0) - 1.0;
 
-        assert!((1.0 + calendar).powf(365.0) - 1.0 - 0.10 < 1e-9);
-        assert!((1.0 + business).powf(252.0) - 1.0 - 0.10 < 1e-9);
-        assert!(business > calendar);
+        assert!((factor - 1.00050788).abs() < 1e-12);
+        assert!((annual - 0.136499893).abs() < 1e-8, "anual {annual}");
     }
 
     #[test]
-    fn contracted_percent_scales_the_annual_rate() {
-        let base = daily_rate(YieldMode::Calendar, 10_000);
-        let contracted = daily_rate(YieldMode::Calendar, 11_500);
-        let expected = (1.0_f64 + 0.10_f64 * 1.15_f64).powf(1.0 / 365.0) - 1.0;
+    fn contracted_percent_scales_the_published_rate() {
+        let base = growth_factor(YieldMode::Business, REAL_DAILY_RATE, 10_000);
+        let high = growth_factor(YieldMode::Business, REAL_DAILY_RATE, 13_000);
 
-        assert!((contracted - expected).abs() < 1e-12);
-        assert!(contracted > base);
-
-        let high = daily_rate(YieldMode::Calendar, 13_000);
-        assert!((1.0 + high).powf(365.0) - 1.0 - 0.13 < 1e-9);
-        assert!(high > contracted);
+        assert!((high - 1.000660244).abs() < 1e-12);
+        assert!(high > base);
     }
 
     #[test]
-    fn yield_uses_one_day_of_the_selected_mode() {
-        let calendar = calculate_yield(100_000, YieldMode::Calendar, 10_000);
-        let business = calculate_yield(100_000, YieldMode::Business, 10_000);
+    fn real_rate_produces_the_official_expected_yields() {
+        for (percent, business, calendar) in [(10_000, 51, 35), (11_500, 58, 40), (13_000, 66, 46)]
+        {
+            let business_yield =
+                calculate_yield(100_000, YieldMode::Business, REAL_DAILY_RATE, percent);
+            let calendar_yield =
+                calculate_yield(100_000, YieldMode::Calendar, REAL_DAILY_RATE, percent);
 
-        assert_eq!(calendar.cdi_annual_bps, CDI_ANNUAL_BPS);
-        assert_eq!(calendar.contracted_percent_bps, 10_000);
-        assert_eq!(calendar.days, 1);
-        assert_eq!(calendar.yield_cents, 26);
-        assert!(business.yield_cents > calendar.yield_cents);
+            assert_eq!(business_yield.yield_cents, business, "business {percent}");
+            assert_eq!(calendar_yield.yield_cents, calendar, "calendar {percent}");
+            assert_eq!(business_yield.contracted_percent_bps, percent);
+            assert_eq!(business_yield.days, 1);
+            if percent == 10_000 {
+                assert!(
+                    (calendar_yield.factor - 1.00035061835717).abs() < 1e-8,
+                    "fator calendar: {}",
+                    calendar_yield.factor
+                );
+            }
+        }
     }
 
     #[test]

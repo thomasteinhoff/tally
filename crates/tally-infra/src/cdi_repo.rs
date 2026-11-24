@@ -1,9 +1,9 @@
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
-use rusqlite::params;
+use rusqlite::{OptionalExtension, params};
 use tally_app::dto::CdiStatusDto;
 use tally_app::error::AppError;
-use tally_app::ports::{CdiCacheInfo, CdiCacheState, CdiRate, CdiRatesRepository};
+use tally_app::ports::{CdiCacheInfo, CdiCacheState, CdiRate, CdiRateSnapshot, CdiRatesRepository};
 
 use crate::db::{Database, map_sqlite_error};
 
@@ -140,6 +140,54 @@ impl CdiRatesRepository for SqliteCdiRepository {
                     )
                     .map_err(map_sqlite_error)?;
                 Ok(())
+            })
+            .await
+    }
+
+    async fn rate_on_or_before(
+        &self,
+        on_or_before: &str,
+    ) -> Result<Option<CdiRateSnapshot>, AppError> {
+        let date = on_or_before.to_owned();
+        self.db
+            .call(move |connection| {
+                connection
+                    .query_row(
+                        "SELECT rate_date, daily_rate, fetched_at FROM cdi_rates
+                     WHERE series = '12' AND rate_date <= ?1
+                     ORDER BY rate_date DESC LIMIT 1",
+                        [date],
+                        |row| {
+                            Ok(CdiRateSnapshot {
+                                rate_date: row.get(0)?,
+                                daily_rate: row.get(1)?,
+                                fetched_at: row.get(2)?,
+                            })
+                        },
+                    )
+                    .optional()
+            })
+            .await
+    }
+
+    async fn rate_on(&self, date: &str) -> Result<Option<CdiRateSnapshot>, AppError> {
+        let date = date.to_owned();
+        self.db
+            .call(move |connection| {
+                connection
+                    .query_row(
+                        "SELECT rate_date, daily_rate, fetched_at FROM cdi_rates
+                     WHERE series = '12' AND rate_date = ?1",
+                        [date],
+                        |row| {
+                            Ok(CdiRateSnapshot {
+                                rate_date: row.get(0)?,
+                                daily_rate: row.get(1)?,
+                                fetched_at: row.get(2)?,
+                            })
+                        },
+                    )
+                    .optional()
             })
             .await
     }

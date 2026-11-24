@@ -385,8 +385,10 @@
           <span class="mono">base = saldo no início do dia</span>
           <span>
             Saldo inicial, aplicações e resgates na data só entram na base no
-            dia seguinte. Em “Somente dias úteis”, fins de semana e feriados
-            nacionais não geram rendimento.
+            dia seguinte. “Somente dias úteis” exige a taxa publicada na data e
+            não rende em fins de semana ou feriados. “Todos os dias” usa a
+            última taxa disponível e uma aproximação de 365 dias definida pelo
+            Tally — não é uma convenção contratual.
           </span>
         </div>
       </div>

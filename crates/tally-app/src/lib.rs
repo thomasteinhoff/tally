@@ -38,11 +38,12 @@ pub use dto::{
 pub use error::{AppError, AppErrorDto};
 pub use movements::{MovementsRepository, MovementsService, NewMovement};
 pub use ports::{
-    BootstrapRepository, CdiCacheInfo, CdiCacheState, CdiFetchRange, CdiRate, CdiRateSource,
-    CdiRatesRepository,
+    BootstrapRepository, CdiCacheInfo, CdiCacheState, CdiFetchRange, CdiRate, CdiRateSnapshot,
+    CdiRateSource, CdiRatesRepository,
 };
 pub use reports::{ReportQuery, ReportsRepository, ReportsService};
 pub use savings::{
-    NewSavingsReversal, NewSavingsYield, SavingsConfig, SavingsRepository, SavingsService,
-    YieldCalculation, YieldMode, calculate_yield, daily_rate, normalize_savings_config,
+    CDI_SERIES, NewSavingsReversal, NewSavingsYield, SavingsConfig, SavingsRepository,
+    SavingsService, YieldCalculation, YieldMode, calculate_yield, growth_factor,
+    normalize_savings_config,
 };

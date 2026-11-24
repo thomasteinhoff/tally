@@ -182,7 +182,8 @@ Regras já aprovadas e que devem ser preservadas:
 - **Já existe uma categoria chamada "Rendimentos"**: não criar outra categoria.
 - O saldo dos cofrinhos aparece separadamente e **nunca** é somado ao
   patrimônio líquido exibido.
-- Sem integração com Mercado Pago ou qualquer API/sincronização automática.
+- Sem integração com Mercado Pago, corretoras ou sincronização automática. A
+  consulta manual de taxas públicas ao SGS 12 passa a fazer parte da Etapa 5.
 - Sem gestão genérica de investimentos: fora de escopo CDBs, ações, fundos,
   cotas, corretoras, passes de ônibus e saldos pré-pagos.
 - Não haverá análise temporal de rendimentos nesta versão.
@@ -506,6 +507,16 @@ equilibrada.
 funcionando; valores apresentados separadamente; patrimônio exibido inalterado
 pela aplicação e pelo rendimento.
 
+**Encerramento (revisão CDI).** A taxa diária passou a vir da SGS 12, com cache
+SQLite e refresh exclusivamente manual. Com `p = percentual / 10.000` e `r` em
+fração decimal: `f_business = 1 + r × p`; `f_calendar = (1 + r × p)^(252/365)`;
+`yield_cents = round(base_cents × (f − 1))`. `business` exige publicação na data;
+`calendar` usa a última taxa `<= as_of` e é aproximação matemática do Tally para
+365 dias corridos, não convenção contratual. Cada snapshot guarda `rate_date`,
+`rate_series`, `cdi_daily_rate` e `rate_fetched_at`; colunas nullable preservam
+snapshots antigos. A metodologia é estimativa do Tally, sem garantia de
+reproduzir produto financeiro específico.
+
 ---
 
 ## 5. Ordem, dependências e validação global
@@ -536,8 +547,6 @@ Releases — fora das etapas de implementação acima.
 
 ## 6. Explicitamente adiado
 
-- Modelo contábil, local de gerenciamento, visibilidade e card-resumo de
-  cofrinhos e rendimentos (Etapa 5).
 - Análise temporal/evolução de rendimentos — versão futura, após cofrinhos.
 - Personalização de dashboard pelo usuário (drag-and-drop, ocultação,
   redimensionamento, temas de widget).

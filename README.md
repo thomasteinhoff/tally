@@ -14,8 +14,10 @@ dobradas: cada movimentação afeta contas reais e o patrimônio de forma
 consistente. Tudo é calculado localmente, em Rust, sobre um banco SQLite que
 fica no seu computador.
 
-Não há login, sincronização ou servidor. O aplicativo funciona offline e os
-dados financeiros nunca saem da máquina.
+Não há login, sincronização ou servidor. O aplicativo funciona offline. A única
+requisição opcional consulta a taxa pública do CDI no Banco Central e envia
+apenas o identificador da série e um intervalo de datas — nenhum dado
+financeiro ou pessoal sai da máquina.
 
 <!-- Capturas de tela: adicionar aqui quando estiverem disponíveis. -->
 
@@ -29,6 +31,7 @@ dados financeiros nunca saem da máquina.
 - Relatórios e análises por categoria, com filtros combináveis.
 - Fluxo de caixa por mês e por origem.
 - Backup local, restauração com snapshot de segurança e exportação CSV.
+- Cofrinhos com aplicações, resgates, ajustes e rendimentos estimados pelo CDI.
 - Temas claro, escuro e sistema.
 
 ## Download
@@ -39,6 +42,28 @@ O Tally é distribuído como instalador NSIS para Windows 10/11.
 
 Versões anteriores e notas de cada lançamento ficam na página de
 [Releases](https://github.com/thomasteinhoff/tally/releases).
+
+## Cofrinhos e CDI
+
+Os rendimentos são uma **estimativa local do Tally**, não uma reprodução
+contratual de produto financeiro algum. A taxa diária vem da SGS 12 do Banco
+Central (`% p.d.`, convertida para fração decimal dividindo por 100) e fica em
+cache no SQLite. O cache só muda quando o usuário aciona “Atualizar taxas”:
+abrir o aplicativo ou gerar um rendimento nunca faz rede.
+
+Com `p = percentual contratado / 10.000` e `r = taxa diária publicada`, o Tally
+calcula `yield_cents = round(base_cents × (f − 1))`, onde:
+
+- `business`: `f = 1 + r × p` e exige taxa publicada exatamente na data;
+- `calendar`: `f = (1 + r × p)^(252/365)`, usa a última taxa publicada em ou
+  antes da data e é uma aproximação matemática do Tally para distribuir o
+  rendimento em 365 dias corridos, inclusive sem publicação na data. Não é uma
+  convenção contratual.
+
+A base é o saldo no início do dia: saldo inicial, aplicações, resgates e ajustes
+da própria data só entram na base no dia seguinte. Cada rendimento registra a
+data da publicação, a série (`12`), a taxa diária usada e quando ela foi obtida;
+mudar a configuração ou atualizar o cache não recalcula snapshots já gravados.
 
 ## Privacidade e armazenamento
 

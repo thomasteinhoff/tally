@@ -7,4 +7,16 @@ export type SavingsYieldDto = { id: string, account_id: string, as_of: string,
 /**
  * `calendar` ou `business`, copiado da configuração no momento do cálculo.
  */
-mode: string, cdi_annual_bps: number, contracted_percent_bps: number, daily_rate: number, days: number, base_cents: number, yield_cents: number, status: string, entry_id: string, reversal_entry_id: string | null, created_at: string, };
+mode: string, cdi_annual_bps: number, contracted_percent_bps: number, daily_rate: number, 
+/**
+ * Data da publicação usada; `null` em snapshots gravados antes do CDI real.
+ */
+rate_date: string | null, 
+/**
+ * Sempre `12` nos snapshots novos.
+ */
+rate_series: string | null, 
+/**
+ * Taxa diária em fração decimal, copiada do cache no momento do cálculo.
+ */
+cdi_daily_rate: number | null, rate_fetched_at: string | null, days: number, base_cents: number, yield_cents: number, status: string, entry_id: string, reversal_entry_id: string | null, created_at: string, };

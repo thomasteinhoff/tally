@@ -64,9 +64,14 @@ fn reports_service(state: &AppState) -> Result<ReportsService<SqliteReportsRepos
     Ok(ReportsService::new(SqliteReportsRepository::new(db)))
 }
 
-fn savings_service(state: &AppState) -> Result<SavingsService<SqliteSavingsRepository>, AppError> {
+type AppSavingsService = SavingsService<SqliteSavingsRepository, SqliteCdiRepository>;
+
+fn savings_service(state: &AppState) -> Result<AppSavingsService, AppError> {
     let db = database(state)?;
-    Ok(SavingsService::new(SqliteSavingsRepository::new(db)))
+    Ok(SavingsService::new(
+        SqliteSavingsRepository::new(db.clone()),
+        SqliteCdiRepository::new(db),
+    ))
 }
 
 fn cdi_service(

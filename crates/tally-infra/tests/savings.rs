@@ -1,17 +1,88 @@
+use async_trait::async_trait;
 use chrono::{Duration, Local};
 use rusqlite::{OptionalExtension, params};
 use tally_app::{
-    AccountsService, AppError, CategoriesService, CreateAccountInput, CreateAdjustmentInput,
-    CreateCardPaymentInput, CreateCategoryInput, CreateExpenseInput, CreateIncomeInput,
-    CreateSavingsYieldInput, CreateTransferInput, MovementFilter, MovementsService,
-    ReplaceSavingsYieldInput, ReportFilter, ReportsService, ReverseSavingsYieldInput,
-    SavingsService, UpdateMovementInput, movements_csv,
+    AccountsService, AppError, CategoriesService, CdiRate, CdiRateSnapshot, CdiRatesRepository,
+    CdiStatusDto, CreateAccountInput, CreateAdjustmentInput, CreateCardPaymentInput,
+    CreateCategoryInput, CreateExpenseInput, CreateIncomeInput, CreateSavingsYieldInput,
+    CreateTransferInput, MovementFilter, MovementsService, ReplaceSavingsYieldInput, ReportFilter,
+    ReportsService, ReverseSavingsYieldInput, SavingsService, UpdateMovementInput, movements_csv,
 };
 use tally_infra::{
     Database, SqliteAccountsRepository, SqliteCardsRepository, SqliteCategoriesRepository,
-    SqliteMovementsRepository, SqliteReportsRepository, SqliteSavingsRepository,
+    SqliteCdiRepository, SqliteMovementsRepository, SqliteReportsRepository,
+    SqliteSavingsRepository,
 };
 use tempfile::TempDir;
+
+/// Fonte de taxas fixa para os testes: uma publicação em 19/11/2026 serve
+/// tanto à modalidade business (data exata) quanto à calendar (última anterior).
+struct FixedCdi;
+
+#[async_trait]
+impl CdiRatesRepository for FixedCdi {
+    async fn status(&self) -> Result<CdiStatusDto, AppError> {
+        unreachable!("status do CDI não é usado nos testes de cofrinho")
+    }
+
+    async fn info(&self) -> Result<tally_app::CdiCacheInfo, AppError> {
+        unreachable!("info do CDI não é usado nos testes de cofrinho")
+    }
+
+    async fn replace(
+        &self,
+        _series: &str,
+        _rates: Vec<tally_app::CdiRate>,
+        _fetched_at: &str,
+    ) -> Result<(), AppError> {
+        unreachable!("refresh do CDI não é usado nos testes de cofrinho")
+    }
+
+    async fn record_failure(&self, _attempted_at: &str, _error: &str) -> Result<(), AppError> {
+        unreachable!("falha do CDI não é usada nos testes de cofrinho")
+    }
+
+    async fn rate_on_or_before(
+        &self,
+        _on_or_before: &str,
+    ) -> Result<Option<CdiRateSnapshot>, AppError> {
+        Ok(Some(rate()))
+    }
+
+    async fn rate_on(&self, _date: &str) -> Result<Option<CdiRateSnapshot>, AppError> {
+        Ok(Some(rate()))
+    }
+}
+
+fn rate() -> CdiRateSnapshot {
+    CdiRateSnapshot {
+        rate_date: "2026-11-19".to_owned(),
+        daily_rate: 0.00050788,
+        fetched_at: "2026-11-23T00:00:00Z".to_owned(),
+    }
+}
+
+fn cdi_service(fixture: &Fixture) -> SavingsService<SqliteSavingsRepository, SqliteCdiRepository> {
+    SavingsService::new(
+        SqliteSavingsRepository::new(fixture.db.clone()),
+        SqliteCdiRepository::new(fixture.db.clone()),
+    )
+}
+
+async fn seed_rates(fixture: &Fixture, rates: &[(&str, f64)]) {
+    let values = rates
+        .iter()
+        .map(|(date, daily_rate)| CdiRate {
+            rate_date: (*date).to_owned(),
+            raw_value: (daily_rate * 100.0).to_string(),
+            daily_rate: *daily_rate,
+        })
+        .collect();
+    SqliteCdiRepository::new(fixture.db.clone())
+        .replace("12", values, "2026-11-23T00:00:00+00:00")
+        .await
+        .expect("taxas.should.be.seeded");
+}
 
 struct Fixture {
     _dir: TempDir,
@@ -21,7 +92,7 @@ struct Fixture {
     cards: tally_app::CardsService<SqliteCardsRepository>,
     movements: MovementsService<SqliteMovementsRepository>,
     reports: ReportsService<SqliteReportsRepository>,
-    savings: SavingsService<SqliteSavingsRepository>,
+    savings: SavingsService<SqliteSavingsRepository, FixedCdi>,
 }
 
 async fn fixture() -> Fixture {
@@ -36,7 +107,7 @@ async fn fixture() -> Fixture {
         cards: tally_app::CardsService::new(SqliteCardsRepository::new(db.clone())),
         movements: MovementsService::new(SqliteMovementsRepository::new(db.clone())),
         reports: ReportsService::new(SqliteReportsRepository::new(db.clone())),
-        savings: SavingsService::new(SqliteSavingsRepository::new(db.clone())),
+        savings: SavingsService::new(SqliteSavingsRepository::new(db.clone()), FixedCdi),
         db,
     }
 }
@@ -949,6 +1020,102 @@ async fn business_mode_rejects_weekends_and_generates_on_business_days() {
 
     let business_day = yield_at(&fixture, &pot, "2026-11-19").await;
     assert_eq!(business_day.mode, "business");
+}
+
+#[tokio::test]
+async fn business_requires_a_rate_published_on_the_exact_date() {
+    let fixture = fixture().await;
+    let bank = account(&fixture, "Banco", 500_000).await;
+    let pot = savings(&fixture, "Cofrinho", "business", 100.0).await;
+    transfer(&fixture, &bank, &pot, 100_000, "2026-11-17").await;
+    seed_rates(&fixture, &[("2026-11-19", 0.00050788)]).await;
+    let service = cdi_service(&fixture);
+
+    let missing = service
+        .create_yield(CreateSavingsYieldInput {
+            account_id: pot.clone(),
+            as_of: "2026-11-18".to_owned(),
+        })
+        .await
+        .expect_err("data útil sem publicação não pode render");
+    assert!(
+        missing
+            .to_string()
+            .contains("não há taxa CDI publicada para esta data"),
+        "{missing}"
+    );
+
+    let created = service
+        .create_yield(CreateSavingsYieldInput {
+            account_id: pot,
+            as_of: "2026-11-19".to_owned(),
+        })
+        .await
+        .expect("taxa publicada na data");
+    assert_eq!(created.rate_date.as_deref(), Some("2026-11-19"));
+    assert_eq!(created.rate_series.as_deref(), Some("12"));
+    assert_eq!(created.cdi_daily_rate, Some(0.00050788));
+    assert!(created.rate_fetched_at.is_some());
+}
+
+#[tokio::test]
+async fn calendar_uses_the_latest_rate_on_or_before_as_of() {
+    let fixture = fixture().await;
+    let bank = account(&fixture, "Banco", 500_000).await;
+    let pot = savings(&fixture, "Cofrinho", "calendar", 100.0).await;
+    transfer(&fixture, &bank, &pot, 100_000, "2026-11-15").await;
+    seed_rates(
+        &fixture,
+        &[("2026-11-16", 0.0004), ("2026-11-19", 0.00050788)],
+    )
+    .await;
+
+    let created = cdi_service(&fixture)
+        .create_yield(CreateSavingsYieldInput {
+            account_id: pot,
+            as_of: "2026-11-21".to_owned(),
+        })
+        .await
+        .expect("calendar aceita data sem publicação");
+    assert_eq!(created.rate_date.as_deref(), Some("2026-11-19"));
+    assert_eq!(created.cdi_daily_rate, Some(0.00050788));
+}
+
+#[tokio::test]
+async fn legacy_yield_snapshots_without_rate_provenance_remain_readable() {
+    let fixture = fixture().await;
+    let bank = account(&fixture, "Banco", 500_000).await;
+    let pot = savings(&fixture, "Cofrinho", "calendar", 100.0).await;
+    transfer(&fixture, &bank, &pot, 100_000, "2026-11-02").await;
+    let created = yield_at(&fixture, &pot, "2026-11-03").await;
+    let id = created.id.clone();
+
+    fixture
+        .db
+        .call(move |connection| {
+            connection.execute(
+                "UPDATE savings_yields
+                 SET rate_date = NULL, rate_series = NULL,
+                     cdi_daily_rate = NULL, rate_fetched_at = NULL
+                 WHERE id = ?1",
+                [id],
+            )
+        })
+        .await
+        .expect("snapshot legado");
+
+    let history = fixture
+        .savings
+        .overview(&pot)
+        .await
+        .expect("overview")
+        .yields;
+    assert_eq!(history.len(), 1);
+    assert_eq!(history[0].id, created.id);
+    assert_eq!(history[0].rate_date, None);
+    assert_eq!(history[0].rate_series, None);
+    assert_eq!(history[0].cdi_daily_rate, None);
+    assert_eq!(history[0].rate_fetched_at, None);
 }
 
 #[tokio::test]

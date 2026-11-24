@@ -61,4 +61,19 @@ pub trait CdiRatesRepository: Send + Sync {
     ) -> Result<(), AppError>;
     /// Registra a tentativa e o erro sem tocar nas taxas já cacheadas.
     async fn record_failure(&self, attempted_at: &str, error: &str) -> Result<(), AppError>;
+    /// Taxa publicada exatamente na data, ou a última `<= data`.
+    async fn rate_on_or_before(
+        &self,
+        on_or_before: &str,
+    ) -> Result<Option<CdiRateSnapshot>, AppError>;
+    /// Exige publicação exatamente na data (modalidade `business`).
+    async fn rate_on(&self, date: &str) -> Result<Option<CdiRateSnapshot>, AppError>;
+}
+
+/// Taxa local usada no cálculo, já com procedência do cache.
+#[derive(Debug, Clone, PartialEq)]
+pub struct CdiRateSnapshot {
+    pub rate_date: String,
+    pub daily_rate: f64,
+    pub fetched_at: String,
 }
