@@ -1,4 +1,4 @@
-use chrono::{Duration, Local, NaiveDate};
+use chrono::{Datelike, Duration, Local, NaiveDate};
 
 use crate::dto::CdiStatusDto;
 use crate::error::AppError;
@@ -6,7 +6,15 @@ use crate::ports::{CdiFetchRange, CdiRateSource, CdiRatesRepository};
 
 /// SGS 12 — CDI diário, `% p.d.` (6 casas na publicação).
 pub const CDI_SERIES: &str = "12";
-const MIN_YEAR: i32 = 1986;
+const SGS_MAX_RANGE_YEARS: i32 = 10;
+
+/// Primeira data aceita pelo SGS para uma consulta que termina em `to`.
+pub fn earliest_sgs_date(to: NaiveDate) -> NaiveDate {
+    let year = to.year() - SGS_MAX_RANGE_YEARS;
+    to.with_year(year)
+        .or_else(|| NaiveDate::from_ymd_opt(year, 3, 1))
+        .expect("data limite do SGS é válida")
+}
 
 /// Converte `0.050788` (percentual ao dia) em `0.00050788` (fração decimal).
 pub fn parse_daily_rate(raw: &str) -> Result<f64, AppError> {
@@ -40,14 +48,23 @@ impl<R: CdiRatesRepository, S: CdiRateSource> CdiService<R, S> {
     }
 
     /// Atualização manual: busca incrementos de 7 dias e substitui o cache
-    /// somente após sucesso. `from` é inclusivo e nunca anterior ao cache.
+    /// somente após sucesso. Nenhuma requisição ultrapassa 10 anos.
     pub async fn refresh(&self, from: Option<&str>) -> Result<CdiStatusDto, AppError> {
         let info = self.repo.info().await?;
         let today = Local::now().date_naive();
+        let earliest = earliest_sgs_date(today);
         let requested = match from {
-            Some(value) => parse_rate_date(value)?,
-            None => NaiveDate::from_ymd_opt(MIN_YEAR, 3, 6)
-                .expect("data inicial da série SGS 12 é válida"),
+            Some(value) => {
+                let date = parse_rate_date(value)?;
+                if date < earliest {
+                    return Err(AppError::validation(format!(
+                        "o SGS aceita no máximo 10 anos de dados; informe uma data igual ou posterior a {}",
+                        earliest.format("%d/%m/%Y")
+                    )));
+                }
+                date
+            }
+            None => earliest,
         };
         let cached = info
             .last_rate_date
@@ -57,7 +74,8 @@ impl<R: CdiRatesRepository, S: CdiRateSource> CdiService<R, S> {
         let start = cached
             .map(|date| date - Duration::days(7))
             .unwrap_or(requested)
-            .max(requested);
+            .max(requested)
+            .max(earliest);
         if start > today {
             return Err(AppError::validation(
                 "a data inicial do CDI não pode ser futura",
@@ -75,7 +93,7 @@ impl<R: CdiRatesRepository, S: CdiRateSource> CdiService<R, S> {
             }
             Err(error) => {
                 self.repo
-                    .record_failure(&fetched_at, error.message())
+                    .record_failure(&fetched_at, &error.message_with_details())
                     .await?;
                 return Err(error);
             }
@@ -86,7 +104,8 @@ impl<R: CdiRatesRepository, S: CdiRateSource> CdiService<R, S> {
 
 #[cfg(test)]
 mod tests {
-    use super::parse_daily_rate;
+    use super::{earliest_sgs_date, parse_daily_rate};
+    use chrono::NaiveDate;
 
     #[test]
     fn converts_published_percent_to_decimal_fraction() {
@@ -99,5 +118,23 @@ mod tests {
         for raw in ["", "abc", "0", "-0.05", "NaN"] {
             assert!(parse_daily_rate(raw).is_err(), "valor {raw} deveria falhar");
         }
+    }
+
+    #[test]
+    fn limits_sgs_window_to_ten_years() {
+        let today = NaiveDate::from_ymd_opt(2026, 11, 23).expect("data");
+        assert_eq!(
+            earliest_sgs_date(today),
+            NaiveDate::from_ymd_opt(2016, 11, 23).expect("data")
+        );
+    }
+
+    #[test]
+    fn avoids_invalid_leap_day_when_subtracting_ten_years() {
+        let today = NaiveDate::from_ymd_opt(2024, 2, 29).expect("data");
+        assert_eq!(
+            earliest_sgs_date(today),
+            NaiveDate::from_ymd_opt(2014, 3, 1).expect("data")
+        );
     }
 }

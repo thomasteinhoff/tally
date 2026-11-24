@@ -112,6 +112,16 @@ impl AppError {
         }
     }
 
+    /// Texto único para persistência: mensagem e detalhes técnicos, quando houver.
+    pub fn message_with_details(&self) -> String {
+        match self.details() {
+            Some(details) if !details.trim().is_empty() => {
+                format!("{} Detalhes: {}", self.message(), details.trim())
+            }
+            _ => self.message().to_owned(),
+        }
+    }
+
     pub fn to_dto(&self) -> AppErrorDto {
         AppErrorDto {
             code: self.code().to_owned(),
@@ -152,5 +162,17 @@ mod tests {
         assert_eq!(AppError::database("x", "y").code(), "DB");
         assert_eq!(AppError::io("x", "y").code(), "IO");
         assert_eq!(AppError::integrity("x", "y").code(), "INTEGRITY");
+    }
+
+    #[test]
+    fn joins_message_and_details_for_persistence() {
+        let detailed = AppError::io("o SGS recusou a consulta", "HTTP 406: limite de 10 anos");
+        assert_eq!(
+            detailed.message_with_details(),
+            "o SGS recusou a consulta Detalhes: HTTP 406: limite de 10 anos"
+        );
+
+        let plain = AppError::validation("data inválida");
+        assert_eq!(plain.message_with_details(), "data inválida");
     }
 }
