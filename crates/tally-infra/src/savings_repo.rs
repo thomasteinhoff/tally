@@ -56,7 +56,7 @@ impl SavingsRepository for SqliteSavingsRepository {
             .ok_or_else(|| AppError::not_found("cofrinho não encontrado"))
     }
 
-    async fn balance_before(&self, account_id: &str, as_of: &str) -> Result<i64, AppError> {
+    async fn balance_through(&self, account_id: &str, as_of: &str) -> Result<i64, AppError> {
         let account_id = account_id.to_owned();
         let as_of = as_of.to_owned();
         self.db
@@ -67,26 +67,7 @@ impl SavingsRepository for SqliteSavingsRepository {
                          JOIN journal_entries e ON e.id = p.entry_id
                          WHERE p.account_id = ?1
                            AND e.posted_at IS NOT NULL
-                           AND e.occurred_on < ?2",
-                    params![account_id, as_of],
-                    |row| row.get::<_, i64>(0),
-                )
-            })
-            .await
-    }
-
-    async fn balance_on(&self, account_id: &str, as_of: &str) -> Result<i64, AppError> {
-        let account_id = account_id.to_owned();
-        let as_of = as_of.to_owned();
-        self.db
-            .call(move |connection| {
-                connection.query_row(
-                    "SELECT COALESCE(SUM(p.amount_cents), 0)
-                         FROM postings p
-                         JOIN journal_entries e ON e.id = p.entry_id
-                         WHERE p.account_id = ?1
-                           AND e.posted_at IS NOT NULL
-                           AND e.occurred_on = ?2",
+                           AND e.occurred_on <= ?2",
                     params![account_id, as_of],
                     |row| row.get::<_, i64>(0),
                 )
@@ -165,7 +146,7 @@ impl SavingsRepository for SqliteSavingsRepository {
             .call(move |connection| {
                 let sql = format!(
                     "{SELECT_YIELD} WHERE sy.account_id = ?1 \
-                     ORDER BY sy.as_of DESC, sy.created_at DESC"
+                     ORDER BY sy.as_of DESC, sy.created_at DESC, sy.id DESC"
                 );
                 let mut statement = connection.prepare(&sql)?;
                 let rows = statement.query_map([account_id], map_yield_row)?;

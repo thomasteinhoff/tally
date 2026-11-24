@@ -10,19 +10,28 @@
     createBackup,
     exportCsv,
     getBootstrap,
+    getCdiStatus,
     getSettings,
     listAccounts,
     listBackups,
     listCategories,
     openAppFolder,
+    refreshCdiRates,
     restoreBackup,
     runIntegrityCheck,
     updateSettings,
   } from "../lib/api";
-  import type { AppErrorDto } from "../lib/api/bindings";
+  import type { AppErrorDto, CdiStatusDto } from "../lib/api/bindings";
   import { normalizeError } from "../lib/errors";
   import { confirmAction } from "../lib/confirm";
-  import { formatDate, kindLabel, paymentLabel } from "../lib/format";
+  import {
+    formatDate,
+    kindLabel,
+    paymentLabel,
+    tenYearsAgoIso,
+    todayIso,
+  } from "../lib/format";
+  import { notify } from "../lib/toast.svelte";
   import {
     setThemePreference,
     themeState,
@@ -59,6 +68,15 @@
     queryFn: () => listCategories(true),
   }));
 
+  // A leitura do cache é local; nenhuma requisição acontece na abertura.
+  const cdiQuery = createQuery(() => ({
+    queryKey: ["cdi", "status"],
+    queryFn: getCdiStatus,
+  }));
+
+  let cdiFrom = $state("");
+  let cdiLoading = $state(false);
+  let cdiError = $state<AppErrorDto | null>(null);
   let retention = $state(10);
   let exportFrom = $state("");
   let exportTo = $state("");
@@ -76,6 +94,38 @@
   const backups = $derived(backupsQuery.data ?? []);
   const accounts = $derived(accountsQuery.data ?? []);
   const categories = $derived(categoriesQuery.data ?? []);
+
+  const cdi = $derived(cdiQuery.data ?? null);
+  const cdiQueryError = $derived(
+    cdiQuery.error ? normalizeError(cdiQuery.error) : null,
+  );
+  const cdiVisibleError = $derived(cdiError ?? cdiQueryError);
+
+  function cdiIsStale(value: CdiStatusDto | null): boolean {
+    if (!value) return false;
+    if (
+      value.rate_count === 0 ||
+      value.last_error !== null ||
+      value.last_success_at === null
+    ) {
+      return true;
+    }
+    const age = Date.now() - new Date(value.last_success_at).getTime();
+    return !Number.isFinite(age) || age > 24 * 60 * 60 * 1000;
+  }
+
+  const cdiStale = $derived(cdiIsStale(cdi));
+  const cdiState = $derived(
+    cdiQueryError && !cdi
+      ? "indisponível"
+      : cdiQuery.isPending
+        ? "carregando"
+        : !cdi || cdi.rate_count === 0
+          ? "sem cache"
+          : cdiStale
+            ? "desatualizado"
+            : "atualizado",
+  );
 
   const kindOptions = [
     "expense",
@@ -194,6 +244,26 @@
     return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
   }
 
+  function formatSync(value: string | null): string {
+    return value ? value.replace("T", " ").slice(0, 16) : "—";
+  }
+
+  async function refreshCdi(): Promise<void> {
+    cdiLoading = true;
+    cdiError = null;
+    try {
+      const status = await refreshCdiRates(cdiFrom.trim() || undefined);
+      queryClient.setQueryData(["cdi", "status"], status);
+      notify("Taxas CDI atualizadas.");
+    } catch (error) {
+      cdiError = normalizeError(error);
+      await queryClient.invalidateQueries({ queryKey: ["cdi", "status"] });
+      notify(cdiError.message, "warn");
+    } finally {
+      cdiLoading = false;
+    }
+  }
+
   function saveRetention(): void {
     if (retentionError) return;
     settingsMutation.mutate({ backup_retention: retention });
@@ -227,9 +297,9 @@
     <span class="eyebrow">Sistema</span>
     <h2>Configurações</h2>
     <p>
-      Aparência, aplicativo, dados e sobre em um só lugar. Diagnóstico, backups
-      e exportação rodam no Rust sobre o banco local; nada é simulado no
-      frontend.
+      Aparência, aplicativo, taxas CDI, dados e sobre em um só lugar.
+      Diagnóstico, backups e exportação rodam no Rust sobre o banco local; nada
+      é simulado no frontend.
     </p>
   </div>
 </section>
@@ -340,10 +410,129 @@
     </footer>
   </section>
 
-  <section class="panel" aria-labelledby="settings-data-title">
+  <section class="panel" aria-labelledby="settings-cdi-title">
     <header class="panel-header">
       <div class="panel-heading">
         <span class="panel-kicker">03</span>
+        <h3 class="panel-title" id="settings-cdi-title">Taxas CDI</h3>
+      </div>
+      <span
+        class="badge"
+        class:badge--ok={cdiState === "atualizado"}
+        class:badge--warn={cdiState === "desatualizado" ||
+          cdiState === "sem cache" ||
+          cdiState === "indisponível"}
+      >
+        {cdiState}
+      </span>
+    </header>
+
+    <div class="data-grid data-grid--auto">
+      <div class="data-cell">
+        <div class="data-label">Série</div>
+        <div class="data-value">SGS {cdi?.series ?? "12"}</div>
+        <div class="data-note">Banco Central</div>
+      </div>
+      <div class="data-cell">
+        <div class="data-label">Taxas em cache</div>
+        <div class="data-value">{cdi ? cdi.rate_count : "—"}</div>
+        <div class="data-note">
+          {cdi?.first_rate_date && cdi?.last_rate_date
+            ? `${formatDate(cdi.first_rate_date)} a ${formatDate(cdi.last_rate_date)}`
+            : "nenhuma publicação"}
+        </div>
+      </div>
+      <div class="data-cell">
+        <div class="data-label">Última sincronização</div>
+        <div class="data-value">{formatSync(cdi?.last_success_at ?? null)}</div>
+        <div class="data-note">
+          última tentativa: {formatSync(cdi?.last_attempt_at ?? null)}
+        </div>
+      </div>
+      <div class="data-cell">
+        <div class="data-label">Última publicação</div>
+        <div class="data-value">
+          {cdi?.last_rate_date ? formatDate(cdi.last_rate_date) : "—"}
+        </div>
+        <div class="data-note">{cdiState}</div>
+      </div>
+    </div>
+
+    {#if cdiVisibleError}
+      <div class="inline-result inline-result--warn" role="alert">
+        <span class="mono">{cdiVisibleError.code}</span>
+        <span>
+          {cdiVisibleError.message}
+          {#if cdiVisibleError.details}· {cdiVisibleError.details}{/if}
+        </span>
+      </div>
+    {:else if cdi?.last_error}
+      <div class="inline-result inline-result--warn" role="status">
+        <span class="mono">última tentativa</span>
+        <span>{cdi.last_error}</span>
+      </div>
+    {/if}
+
+    <div class="filters filters--compact">
+      <label class="field">
+        <span>
+          Data inicial (opcional)
+          <small>SGS limita a 10 anos</small>
+        </span>
+        <input
+          type="date"
+          bind:value={cdiFrom}
+          min={tenYearsAgoIso()}
+          max={todayIso()}
+        />
+      </label>
+      <div class="actions">
+        <button
+          type="button"
+          class="button"
+          onclick={() => cdiQuery.refetch()}
+          disabled={cdiQuery.isFetching}
+        >
+          {cdiQuery.isFetching ? "Consultando…" : "Consultar cache"}
+        </button>
+        <button
+          type="button"
+          class="button button--primary"
+          onclick={() => void refreshCdi()}
+          disabled={cdiLoading}
+        >
+          {cdiLoading ? "Atualizando…" : "Atualizar taxas"}
+        </button>
+      </div>
+    </div>
+
+    {#if cdiStale && !cdiVisibleError && !cdi?.last_error}
+      <div class="inline-result inline-result--warn" role="status">
+        <span class="mono">cache</span>
+        <span>
+          Cache desatualizado. As taxas em cache continuam disponíveis para os
+          rendimentos; use “Atualizar taxas” quando houver conexão.
+        </span>
+      </div>
+    {/if}
+
+    <footer class="panel-footer">
+      <div class="panel-footnote">
+        <span class="mono">privacidade</span>
+        <span>
+          Somente a série 12 e o intervalo de datas são enviados ao Banco
+          Central. Sem data informada, os últimos 10 anos são buscados. Nenhum
+          dado financeiro ou pessoal sai do aplicativo. A atualização nunca é
+          automática.
+        </span>
+      </div>
+    </footer>
+  </section>
+
+  <section class="panel" aria-labelledby="settings-data-title">
+    <header class="panel-header">
+      <div class="panel-heading">
+        <span class="panel-kicker">04</span>
         <h3 class="panel-title" id="settings-data-title">Dados</h3>
       </div>
       <span
@@ -695,7 +884,7 @@
   <section class="panel" aria-labelledby="settings-about-title">
     <header class="panel-header">
       <div class="panel-heading">
-        <span class="panel-kicker">04</span>
+        <span class="panel-kicker">05</span>
         <h3 class="panel-title" id="settings-about-title">Sobre</h3>
       </div>
       <span class="panel-meta">local-first · offline</span>

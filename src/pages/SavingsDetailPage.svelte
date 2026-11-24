@@ -1,19 +1,13 @@
 <script lang="ts">
   import { createQuery, useQueryClient } from "@tanstack/svelte-query";
 
-  import type {
-    CdiStatusDto,
-    MovementFilter,
-    SavingsYieldDto,
-  } from "../lib/api/bindings";
+  import type { MovementFilter, SavingsYieldDto } from "../lib/api/bindings";
   import {
     createSavingsYield,
     createTransfer,
-    getCdiStatus,
     getSavingsOverview,
     listAccounts,
     listMovements,
-    refreshCdiRates,
     replaceSavingsYield,
     reverseSavingsYield,
   } from "../lib/api";
@@ -25,7 +19,6 @@
     formatDate,
     kindLabel,
     parseAmountToCents,
-    tenYearsAgoIso,
     todayIso,
   } from "../lib/format";
   import { notify } from "../lib/toast.svelte";
@@ -42,16 +35,6 @@
   let transferDescription = $state("");
   let localError = $state<string | null>(null);
   let busy = $state(false);
-  let cdiFrom = $state("");
-  let cdiStatus = $state<CdiStatusDto | null>(null);
-  let cdiLoading = $state(false);
-  let cdiError = $state<string | null>(null);
-
-  // A leitura do cache é local; nenhuma requisição acontece na abertura.
-  const cdiQuery = createQuery(() => ({
-    queryKey: ["cdi", "status"],
-    queryFn: getCdiStatus,
-  }));
 
   const overviewQuery = createQuery(() => ({
     queryKey: ["savings", accountId],
@@ -81,18 +64,6 @@
   const account = $derived(overview?.account);
   const yields = $derived(overview?.yields ?? []);
   const history = $derived(historyQuery.data ?? []);
-  const cdi = $derived(cdiStatus ?? cdiQuery.data ?? null);
-
-  function cdiIsStale(value: CdiStatusDto | null): boolean {
-    if (!value) return false;
-    if (value.rate_count === 0 || value.last_error !== null || value.last_success_at === null) {
-      return true;
-    }
-    const age = Date.now() - new Date(value.last_success_at).getTime();
-    return !Number.isFinite(age) || age > 24 * 60 * 60 * 1000;
-  }
-
-  const cdiStale = $derived(cdiIsStale(cdi));
   const archived = $derived(Boolean(account?.archived_at));
   const regularAccounts = $derived(
     (accountsQuery.data ?? []).filter(
@@ -118,25 +89,6 @@
       notify(localError, "warn");
     } finally {
       busy = false;
-    }
-  }
-
-  async function refreshCdi(): Promise<void> {
-    cdiLoading = true;
-    cdiError = null;
-    try {
-      cdiStatus = await refreshCdiRates(cdiFrom.trim() || undefined);
-      notify("Taxas CDI atualizadas.");
-      await queryClient.invalidateQueries({ queryKey: ["cdi", "status"] });
-    } catch (error) {
-      // O toast traz a mensagem curta; o painel mostrará o erro persistido
-      // (com detalhes técnicos) depois da invalidação abaixo.
-      cdiError = normalizeError(error).message;
-      cdiStatus = null;
-      await queryClient.invalidateQueries({ queryKey: ["cdi", "status"] });
-      notify(cdiError, "warn");
-    } finally {
-      cdiLoading = false;
     }
   }
 
@@ -220,10 +172,10 @@
     <span class="eyebrow">Cofrinho</span>
     <h2>{account?.name ?? "Cofrinho"}</h2>
     <p>
-      Rendimento diário sobre o saldo no início do dia. Aplicações e resgates
-      são transferências com uma conta convencional; rendimentos e estornos
-      aparecem em Movimentações com tipo próprio e continuam fora de receitas,
-      despesas e fluxo de caixa.
+      Rendimento sobre o saldo disponível na data informada, com capitalização
+      sucessiva. Aplicações e resgates são transferências com uma conta
+      convencional; rendimentos e estornos aparecem em Movimentações com tipo
+      próprio e continuam fora de receitas, despesas e fluxo de caixa.
     </p>
   </div>
   <button
@@ -275,71 +227,6 @@
     </div>
   </section>
 {:else}
-  <section class="panel" aria-labelledby="cdi-status-title">
-    <header class="panel-header">
-      <div class="panel-heading">
-        <span class="panel-kicker">SGS 12</span>
-        <h3 class="panel-title" id="cdi-status-title">Taxas CDI</h3>
-      </div>
-      <span class="panel-meta">
-        {cdi ? `${cdi.rate_count} taxas` : "carregando"}
-      </span>
-    </header>
-    <div class="panel-body">
-      <p>
-        {#if cdi && cdi.last_rate_date}
-          Última publicação em {formatDate(cdi.last_rate_date)}.
-        {:else}
-          Nenhuma taxa em cache. Atualize as taxas antes de gerar rendimentos.
-        {/if}
-      </p>
-      {#if cdiStale}
-        <div class="inline-result inline-result--warn" role="status">
-          <span>
-            {#if cdi?.last_error}
-              Última atualização falhou: {cdi.last_error}.
-              {#if cdi.rate_count > 0}
-                As taxas em cache continuam disponíveis; use “Atualizar taxas”
-                quando houver conexão.
-              {:else}
-                Nenhuma taxa em cache; tente novamente quando o SGS estiver
-                disponível.
-              {/if}
-            {:else}
-              Cache desatualizado. As taxas em cache continuam disponíveis; use
-              “Atualizar taxas” quando houver conexão.
-            {/if}
-          </span>
-        </div>
-      {/if}
-      <div class="filters">
-        <label class="field">
-          <span>Data inicial (opcional)</span>
-          <input
-            type="date"
-            bind:value={cdiFrom}
-            min={tenYearsAgoIso()}
-            max={todayIso()}
-          />
-        </label>
-        <button
-          type="button"
-          class="button button--primary"
-          disabled={cdiLoading}
-          onclick={() => void refreshCdi()}
-        >
-          {cdiLoading ? "Atualizando…" : "Atualizar taxas"}
-        </button>
-      </div>
-      <p class="panel-footnote">
-        Somente o identificador da série (12) e o intervalo de datas são
-        enviados ao Banco Central. O SGS limita consultas diárias a 10 anos; sem
-        data informada, os últimos 10 anos são buscados. Nenhum dado financeiro
-        ou pessoal sai do aplicativo.
-      </p>
-    </div>
-  </section>
-
   <section class="summary-strip" aria-label="Resumo do cofrinho">
     <div>
       <span class="data-label">Saldo do cofrinho</span>
@@ -408,13 +295,14 @@
       </div>
       <div class="panel-footer">
         <div class="panel-footnote">
-          <span class="mono">base = saldo no início do dia</span>
+          <span class="mono">base = saldo disponível até a data informada</span>
           <span>
-            Saldo inicial, aplicações e resgates na data só entram na base no
-            dia seguinte. “Somente dias úteis” exige a taxa publicada na data e
-            não rende em fins de semana ou feriados. “Todos os dias” usa a
-            última taxa disponível e uma aproximação de 365 dias definida pelo
-            Tally — não é uma convenção contratual.
+            Saldo inicial, aplicações, ajustes, estornos e rendimentos anteriores
+            na data entram na base. É possível gerar vários rendimentos no mesmo
+            dia. “Somente dias úteis” exige a taxa publicada na data e não rende
+            em fins de semana ou feriados. “Todos os dias” usa a última taxa
+            disponível e uma aproximação de 365 dias definida pelo Tally — não é
+            uma convenção contratual.
           </span>
         </div>
       </div>

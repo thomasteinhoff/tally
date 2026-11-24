@@ -240,6 +240,9 @@ fn migrations() -> Migrations<'static> {
         )),
         M::up(include_str!("../migrations/0006_savings_adjustment.sql")),
         M::up(include_str!("../migrations/0007_cdi_rates.sql")),
+        M::up(include_str!(
+            "../migrations/0008_multiple_savings_yields.sql"
+        )),
     ])
 }
 

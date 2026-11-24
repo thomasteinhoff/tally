@@ -111,7 +111,7 @@ async fn migrates_and_seeds_system_accounts() {
         })
         .await
         .expect("schema version");
-    assert_eq!(schema_version, 7);
+    assert_eq!(schema_version, 8);
 
     let system_accounts = db
         .call(|connection| {
@@ -163,7 +163,7 @@ async fn bootstrap_reads_real_database_state() {
     let dto = service.bootstrap().await.expect("bootstrap should work");
 
     assert_eq!(dto.app_version, "0.1.0");
-    assert_eq!(dto.schema_version, 7);
+    assert_eq!(dto.schema_version, 8);
     assert_eq!(dto.system_accounts, 4);
     assert_eq!(dto.settings.backup_retention, 10);
     assert!(!dto.settings.first_run_completed);
