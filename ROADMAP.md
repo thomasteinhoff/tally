@@ -21,20 +21,26 @@
   `313b3bb53243db19f07438594cd0b812ad7c96bb690064ef6f1832f4436ccf32`).
 - Commit de limpeza/documentação: `957bf3725fe1c2a107f5f722562d2ef23478d605`
   (`chore: clean repository and improve documentation`).
-- `origin/main` = `957bf37`; tag `v0.1.0` aponta para `82105cf`.
-- v0.2.0 em andamento: **Etapa 1 concluída** em
-  `ca80d70e03e43758420d5c67568e8ab375ff4500`
-  (`feat: ordena movimentações cronologicamente e ajusta formulário`).
-- **Etapa 2 concluída** em `81977c84efd03bc4dcb4592f7893fba12afad167`
-  (`feat: adiciona ícones de categoria e seletor com suporte visual`).
-- **Etapa 3 concluída** em `186074e046cca95f763260e70cd45ed5f937cf41`
-  (`feat: separa visao geral e quadro de analises`).
-- **Etapa 4 concluída** em `435c980a56ebdbd0cf514d313b6491e210a46256`
-  (`feat: conclui o quadro de analises da v0.2.0`); Etapa 5 pendente.
+- `origin/main` = `de1776138a69807529322ea610061c4ad8bb37a0`; tag `v0.1.0`
+  aponta para `82105cf`.
+- HEAD local: `b36f5d1adc394fa0b53dae05a0431c115d07170c`
+  (`feat(savings): adiciona rendimentos acumulativos e CDI global`), com a
+  Etapa 5 ainda não commitada.
+- v0.2.0: Etapas 1–4 concluídas nos commits
+  `ca80d70e03e43758420d5c67568e8ab375ff4500`,
+  `81977c84efd03bc4dcb4592f7893fba12afad167`,
+  `186074e046cca95f763260e70cd45ed5f937cf41` e
+  `435c980a56ebdbd0cf514d313b6491e210a46256`.
+- **Etapa 5 concluída** no working tree: cofrinhos com rendimentos acumulativos,
+  histórico com estorno/substituição, CDI automático, pagamento de cartão com
+  sugestão FIFO e indicador mensal separado. Implementação e validação técnica
+  concluídas; release **em preparação**, aguardando revisão, checkpoint, tag,
+  build e publicação.
+- Versão `0.2.0` declarada nos manifestos; release ainda não publicada.
 - Repositório público com descrição e topics atualizados; sem homepage e sem
   arquivo `LICENSE` (o `Cargo.toml` declara MIT).
-- `package.json` ainda declara versão `0.1.0`; a atualização de versão faz parte
-  do fechamento da v0.2.0.
+- Alteração preexistente em `crates/tally-infra/src/cdi_client.rs` permanece
+  fora do checkpoint da v0.2.0.
 
 ### Arquitetura e princípios mantidos
 
@@ -43,8 +49,9 @@
 - Tauri 2 + Svelte 5/TypeScript + SQLite (`rusqlite` bundled); TanStack Query
   para estado de servidor, runes do Svelte para estado local.
 - Uma mutação = uma transação; relatórios leem apenas lançamentos publicados.
-- Local-first/offline: dados em `%LOCALAPPDATA%\Tally\`, sem login, nuvem,
-  sincronização ou telemetria.
+- Local-first: dados em `%LOCALAPPDATA%\Tally\`, sem login, nuvem,
+  sincronização ou telemetria; a única rede é a consulta de taxas públicas do
+  SGS, manual ou automática na abertura.
 - BRL e pt-BR apenas; Windows como plataforma inicial.
 - Identidade visual preservada: tema grafite escuro, IBM Plex, símbolo
   `tally.png`, `--accent`/terracota reservado a marca e ações, `--positive` e
@@ -183,7 +190,8 @@ Regras já aprovadas e que devem ser preservadas:
 - O saldo dos cofrinhos aparece separadamente e **nunca** é somado ao
   patrimônio líquido exibido.
 - Sem integração com Mercado Pago, corretoras ou sincronização automática. A
-  consulta manual de taxas públicas ao SGS 12 passa a fazer parte da Etapa 5.
+  consulta de taxas públicas ao SGS 12 foi concluída na Etapa 5, com atualização
+  manual e automática.
 - Sem gestão genérica de investimentos: fora de escopo CDBs, ações, fundos,
   cotas, corretoras, passes de ônibus e saldos pré-pagos.
 - Não haverá análise temporal de rendimentos nesta versão.
@@ -198,6 +206,10 @@ Decisões **explicitamente diferidas** para a etapa final (não tomar antes):
 - inclusão e forma de um card compacto de cofrinhos na Visão Geral — que, se
   existir, não poderá ser afetado pelo mês selecionado no Quadro de Análises.
 
+Essas decisões foram fechadas na Etapa 5: gerenciamento em Contas/cartões com
+tela de detalhe, modelo contábil com lançamento específico e snapshots,
+rendimentos visíveis no histórico e card compacto na Visão Geral.
+
 ### 2.10 Questões encerradas (não reabri sem novo pedido)
 
 - Horário atual pré-preenchido; período manual visível como alternativa.
@@ -210,6 +222,8 @@ Decisões **explicitamente diferidas** para a etapa final (não tomar antes):
   percentual (D1).
 - Compromissos detalhados fora do Quadro de Análises (D2).
 - Análise temporal de rendimentos: adiada.
+- Atualização automática do CDI na abertura: dias úteis, `≥24h` do último
+  sucesso ou `≥1h` da última falha; manual e cache preservados.
 
 ---
 
@@ -461,26 +475,28 @@ gasto — mitigada pela decisão D1; `npm run bindings` sem diff.
 
 ---
 
-### Etapa 5 — Cofrinhos e rendimentos (última etapa)
+### Etapa 5 — Cofrinhos e rendimentos (última etapa) ✅ CONCLUÍDA
 
 **Objetivo.** Implementar o suporte a cofrinhos com aplicações, resgates e
-rendimentos manuais, preservando a integridade dos relatórios atuais e a regra
-de exclusão do patrimônio exibido.
+rendimentos acumulativos, preservando a integridade dos relatórios atuais e a
+regra de exclusão do patrimônio exibido.
 
-**Status do planejamento.** Regras de produto já fechadas em `2.9`. As decisões
-específicas de modelo contábil, local de gerenciamento e apresentação ficam
-registradas quando esta etapa começar — **não** foram tomadas neste documento e
-não devem ser antecipadas nas etapas 1–4.
+**Status.** Concluída no working tree em `b36f5d1adc394fa0b53dae05a0431c115d07170c`
+(`feat(savings): adiciona rendimentos acumulativos e CDI global`). Incluiu
+rendimentos acumulativos com histórico, estorno compensatório e substituição do
+último confirmado, CDI automático na abertura, pagamento de cartão com sugestão
+do ciclo e alocação FIFO, e indicador mensal fora de receitas/despesas/caixa.
+Validação técnica concluída; checkpoint, tag, build e publicação seguem
+pendentes de aprovação.
 
-**Arquivos e componentes (reservados, a confirmar na etapa).**
+**Arquivos e componentes.**
 
-- `crates/tally-infra/migrations/0004_cofrinhos.sql` (numerar após `0003`)
-- `crates/tally-infra/src/accounts_repo.rs`
-- `crates/tally-domain/src/account.rs`
-- `crates/tally-app/src/accounts.rs`, `movements.rs`, `dto.rs`
-- novo serviço/repositório de cofrinhos, `src-tauri/src/commands.rs`, bindings
-- `src/pages/AccountsPage.svelte` ou tela própria (decisão diferida)
-- `src/pages/OverviewPage.svelte` (card compacto, decisão diferida)
+- `crates/tally-infra/migrations/0004_savings.sql` a `0008_multiple_savings_yields.sql`
+- `crates/tally-infra/src/savings_repo.rs`, `reports_repo.rs`
+- `crates/tally-app/src/cdi.rs`, `reports.rs`, `dto.rs`
+- `src-tauri/src/commands.rs`, `lib.rs`, `state.rs`, bindings regenerados
+- `src/pages/AccountsPage.svelte`, `SavingsDetailPage.svelte`, `SettingsPage.svelte`
+- `src/pages/OverviewPage.svelte` (card compacto e indicador mensal)
 
 **Regras de negócio já fixadas.**
 
@@ -491,24 +507,26 @@ não devem ser antecipadas nas etapas 1–4.
 - Saldo de cofrinho fora do patrimônio líquido exibido.
 - Sem API/sync e sem gestão genérica de investimentos.
 
-**Dependências e riscos a avaliar na etapa.** Validações de `create_transfer`
+**Dependências e riscos avaliados.** Validações de `create_transfer`
 (não restringe contas sistêmicas), CHECKs de `class`/`is_system`, triggers de
 lançamento publicado, edição/exclusão pelo caminho genérico de movimentação,
 exclusão de rendimentos de fluxo de caixa e relatórios por categoria, restore de
 backup legado e regeneração de bindings.
 
-**Testes a definir na etapa.** Exemplo de referência: contas comuns R$ 2.000,
-cofrinho R$ 500,35, passivos R$ 300 → patrimônio exibido R$ 1.700 e total
-aplicado R$ 500,35. Aplicação não é despesa; resgate não é receita; rendimento
-não entra em receita, despesa ou fluxo de caixa; soma dos postings permanece
-equilibrada.
+**Testes.** Exemplo de referência: contas comuns R$ 2.000, cofrinho R$ 500,35,
+passivos R$ 300 → patrimônio exibido R$ 1.700 e total aplicado R$ 500,35.
+Aplicação não é despesa; resgate não é receita; rendimento não entra em receita,
+despesa ou fluxo de caixa; soma dos postings permanece equilibrada. Cobertura
+adicional de estorno, substituição do último confirmado e indicador mensal.
 
-**Critérios de conclusão (a detalhar na etapa).** Operações de cofrinho
-funcionando; valores apresentados separadamente; patrimônio exibido inalterado
-pela aplicação e pelo rendimento.
+**Critérios de conclusão.** Operações de cofrinho funcionando; valores
+apresentados separadamente; patrimônio exibido inalterado pela aplicação e pelo
+rendimento; histórico preservado; indicador mensal separado dos relatórios.
 
 **Encerramento (revisão CDI).** A taxa diária passou a vir da SGS 12, com cache
-SQLite e refresh exclusivamente manual. Com `p = percentual / 10.000` e `r` em
+SQLite, atualização manual e refresh automático na abertura em dias úteis
+(`≥24h` do último sucesso ou `≥1h` da última falha; sem calendário de feriados).
+Com `p = percentual / 10.000` e `r` em
 fração decimal: `f_business = 1 + r × p`; `f_calendar = (1 + r × p)^(252/365)`;
 `yield_cents = round(base_cents × (f − 1))`. `business` exige publicação na data;
 `calendar` usa a última taxa `<= as_of` e é aproximação matemática do Tally para
@@ -539,9 +557,11 @@ cargo test --workspace
 npm run bindings   # não pode gerar diff em src/lib/api/bindings
 ```
 
-O fechamento da v0.2.0 também atualiza a versão em `package.json`, `Cargo.toml`
-e demais manifestos, gera o changelog/release e publica o instalador via GitHub
-Releases — fora das etapas de implementação acima.
+O fechamento da v0.2.0 já atualizou a versão em `package.json`,
+`package-lock.json`, `Cargo.toml`, `Cargo.lock` e `src-tauri/tauri.conf.json`.
+Ainda pendem, sujeitos a aprovação: checkpoint/commit, tag `v0.2.0`, build do
+instalador, notas de release e publicação via GitHub Releases. Não foi criado
+`CHANGELOG` nesta etapa.
 
 ---
 

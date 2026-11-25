@@ -261,8 +261,8 @@
       <table class="data-table">
         <thead>
           <tr>
-            <th scope="col">Conta</th>
             <th scope="col">Tipo</th>
+            <th scope="col">Nome da conta</th>
             <th scope="col">Situação</th>
             <th scope="col" class="align-right">Saldo</th>
             <th scope="col" class="align-right">Ações</th>
@@ -272,14 +272,14 @@
           {#each accounts as account (account.id)}
             <tr class:row-muted={Boolean(account.archived_at)}>
               <td>
-                <a class="text-link" href={accountHref(account)}>
-                  {account.name}
-                </a>
-              </td>
-              <td>
                 {account.is_savings
                   ? "Cofrinho"
                   : accountTypeLabel(account.account_type)}
+              </td>
+              <td>
+                <a class="text-link" href={accountHref(account)}>
+                  <strong>{account.name}</strong>
+                </a>
               </td>
               <td>
                 {#if account.archived_at}

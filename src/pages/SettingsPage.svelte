@@ -68,7 +68,7 @@
     queryFn: () => listCategories(true),
   }));
 
-  // A leitura do cache é local; nenhuma requisição acontece na abertura.
+  // A leitura aqui é local; a atualização automática avisa pelo evento cdi-status.
   const cdiQuery = createQuery(() => ({
     queryKey: ["cdi", "status"],
     queryFn: getCdiStatus,
@@ -522,8 +522,12 @@
         <span>
           Somente a série 12 e o intervalo de datas são enviados ao Banco
           Central. Sem data informada, os últimos 10 anos são buscados. Nenhum
-          dado financeiro ou pessoal sai do aplicativo. A atualização nunca é
-          automática.
+          dado financeiro ou pessoal sai do aplicativo. Ao abrir o aplicativo,
+          em dias úteis, o Tally tenta atualizar as taxas automaticamente: nova
+          tentativa após pelo menos 24h desde o último sucesso ou 1h desde a
+          última falha. Sábado e domingo não contam, e não há calendário de
+          feriados. Se a consulta falhar, o cache local continua disponível para
+          os rendimentos; você também pode atualizar manualmente.
         </span>
       </div>
     </footer>

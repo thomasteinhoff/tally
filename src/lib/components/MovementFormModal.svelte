@@ -23,6 +23,7 @@
     MovementFormRequest,
     SimpleMovementKind,
   } from "../movement-form";
+  import { suggestedCardPaymentCents } from "../movement-form";
   import CategorySelect from "./CategorySelect.svelte";
   import Modal from "./Modal.svelte";
 
@@ -72,6 +73,13 @@
     onclose: () => void;
   } = $props();
 
+  function paymentAmountText(cardId: string): string {
+    const selected = cards.find((card) => card.id === cardId);
+    if (!selected) return "";
+    const cents = suggestedCardPaymentCents(selected);
+    return cents > 0 ? formatAmountInput(cents) : "";
+  }
+
   const initial = untrack(() => {
     const current = movement;
     const editing = current !== null;
@@ -83,6 +91,7 @@
     const initialPaymentMethod =
       current?.payment_method ??
       (initialKind === "card_purchase" ? "credit" : "pix");
+    const initialCardId = defaultCardId || cards[0]?.id || "";
 
     return {
       editing,
@@ -94,7 +103,9 @@
         ? formatAmountInput(
             movementAmountForInput(current.kind, current.amount_cents),
           )
-        : "",
+        : initialKind === "card_payment"
+          ? paymentAmountText(initialCardId)
+          : "",
       occurredOn: current?.occurred_on ?? todayIso(),
       occurredTime: current
         ? (current.occurred_time ?? "")
@@ -102,7 +113,7 @@
       manualPeriod: current?.manual_period ?? "",
       description: current?.description ?? "",
       paymentMethod: initialPaymentMethod,
-      cardId: defaultCardId || cards[0]?.id || "",
+      cardId: initialCardId,
       bankId: "",
       paymentMode: "cash" as "cash" | "installments",
       installmentCount: 1,
@@ -506,7 +517,14 @@
       {:else if isCardPayment}
         <label class="field">
           <span>Cartão</span>
-          <select bind:value={cardId} required>
+          <select
+            value={cardId}
+            onchange={(event) => {
+              cardId = event.currentTarget.value;
+              amountText = paymentAmountText(cardId);
+            }}
+            required
+          >
             <option value="" disabled>Escolha o cartão</option>
             {#each cardOptions as card (card.id)}
               <option value={card.id}>{card.name}</option>
@@ -699,11 +717,15 @@
       </p>
     {:else if isCardPayment}
       <p class="form-hint">
-        O pagamento reduz a dívida e o caixa, mas não vira despesa. A alocação é
-        FIFO: primeiro a dívida inicial do cartão, depois as parcelas mais
-        antigas.
-        {#if selectedCard && selectedCard.debt_cents > 0}
-          Dívida atual: {formatCents(selectedCard.debt_cents)}.
+        O pagamento reduz a dívida e o caixa, mas não vira despesa. O valor
+        sugerido é o compromisso do ciclo: dívida inicial + parcelas vencidas +
+        parcelas que vencem neste mês; parcelas futuras ficam de fora. A alocação
+        é FIFO: primeiro a dívida inicial, depois as parcelas mais antigas; o
+        excedente vira crédito no cartão. Valor calculado ao abrir o formulário
+        e recalculado ao selecionar outro cartão.
+        {#if selectedCard}
+          Fatura atual: {formatCents(suggestedCardPaymentCents(selectedCard))} ·
+          dívida total: {formatCents(selectedCard.debt_cents)}.
         {/if}
       </p>
     {/if}

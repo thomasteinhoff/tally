@@ -12,6 +12,7 @@
     reverseSavingsYield,
   } from "../lib/api";
   import { confirmAction } from "../lib/confirm";
+  import Modal from "../lib/components/Modal.svelte";
   import { normalizeError } from "../lib/errors";
   import {
     currentTime,
@@ -35,6 +36,7 @@
   let transferDescription = $state("");
   let localError = $state<string | null>(null);
   let busy = $state(false);
+  let showYieldInfo = $state(false);
 
   const overviewQuery = createQuery(() => ({
     queryKey: ["savings", accountId],
@@ -63,6 +65,16 @@
   const overview = $derived(overviewQuery.data);
   const account = $derived(overview?.account);
   const yields = $derived(overview?.yields ?? []);
+  const lastConfirmedYieldIds = $derived.by(() => {
+    const seenDates = new Set<string>();
+    const ids = new Set<string>();
+    for (const item of yields) {
+      if (item.status !== "confirmed" || seenDates.has(item.as_of)) continue;
+      seenDates.add(item.as_of);
+      ids.add(item.id);
+    }
+    return ids;
+  });
   const history = $derived(historyQuery.data ?? []);
   const archived = $derived(Boolean(account?.archived_at));
   const regularAccounts = $derived(
@@ -178,13 +190,24 @@
       próprio e continuam fora de receitas, despesas e fluxo de caixa.
     </p>
   </div>
-  <button
-    type="button"
-    class="button"
-    onclick={() => void queryClient.invalidateQueries()}
-  >
-    Atualizar
-  </button>
+  <div class="page-actions">
+    <button
+      type="button"
+      class="button"
+      aria-haspopup="dialog"
+      aria-expanded={showYieldInfo}
+      onclick={() => (showYieldInfo = true)}
+    >
+      Como funciona
+    </button>
+    <button
+      type="button"
+      class="button"
+      onclick={() => void queryClient.invalidateQueries()}
+    >
+      Atualizar
+    </button>
+  </div>
 </section>
 
 {#if localError}
@@ -293,19 +316,6 @@
           </button>
         </div>
       </div>
-      <div class="panel-footer">
-        <div class="panel-footnote">
-          <span class="mono">base = saldo disponível até a data informada</span>
-          <span>
-            Saldo inicial, aplicações, ajustes, estornos e rendimentos anteriores
-            na data entram na base. É possível gerar vários rendimentos no mesmo
-            dia. “Somente dias úteis” exige a taxa publicada na data e não rende
-            em fins de semana ou feriados. “Todos os dias” usa a última taxa
-            disponível e uma aproximação de 365 dias definida pelo Tally — não é
-            uma convenção contratual.
-          </span>
-        </div>
-      </div>
     {/if}
 
     {#if yields.length === 0}
@@ -361,14 +371,16 @@
                       >
                         Estornar
                       </button>
-                      <button
-                        type="button"
-                        class="button button--small button--quiet"
-                        disabled={busy}
-                        onclick={() => void substituteYield(item)}
-                      >
-                        Substituir
-                      </button>
+                      {#if lastConfirmedYieldIds.has(item.id)}
+                        <button
+                          type="button"
+                          class="button button--small button--quiet"
+                          disabled={busy}
+                          onclick={() => void substituteYield(item)}
+                        >
+                          Substituir
+                        </button>
+                      {/if}
                     </div>
                   {:else}
                     —
@@ -499,4 +511,27 @@
       </div>
     {/if}
   </section>
+{/if}
+
+{#if showYieldInfo}
+  <Modal
+    title="Como funcionam os rendimentos"
+    onclose={() => (showYieldInfo = false)}
+  >
+    <p class="mono">base = saldo disponível até a data informada</p>
+    <p>
+      Saldo inicial, aplicações, ajustes, estornos e rendimentos anteriores na
+      data entram na base. É possível gerar vários rendimentos no mesmo dia.
+    </p>
+    <p>
+      “Somente dias úteis” exige a taxa publicada na data e não rende em fins de
+      semana ou feriados. “Todos os dias” usa a última taxa disponível e uma
+      aproximação de 365 dias definida pelo Tally — não é uma convenção
+      contratual.
+    </p>
+    <p>
+      Rendimentos e estornos aparecem em Movimentações com tipo próprio e
+      continuam fora de receitas, despesas e fluxo de caixa.
+    </p>
+  </Modal>
 {/if}

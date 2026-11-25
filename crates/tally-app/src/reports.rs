@@ -63,6 +63,9 @@ pub trait ReportsRepository: Send + Sync {
     async fn overdue_installments(&self, as_of: &str) -> Result<i64, AppError>;
 
     async fn card_totals(&self) -> Result<(i64, i64), AppError>;
+
+    /// Soma das postings publicadas de rendimentos e estornos de cofrinhos no período.
+    async fn savings_yield_net(&self, from: &str, to: &str) -> Result<i64, AppError>;
 }
 
 pub struct ReportsService<R> {
@@ -180,6 +183,10 @@ impl<R: ReportsRepository> ReportsService<R> {
         let income = self.repo.category_report("income", &month_query).await?;
         let (card_debt_cents, card_credit_cents) = self.repo.card_totals().await?;
         let overdue_installments_cents = self.repo.overdue_installments(&as_of).await?;
+        let month_savings_yield_cents = self
+            .repo
+            .savings_yield_net(&month_query.from, &month_query.to)
+            .await?;
         let commitments = self
             .repo
             .commitments(&as_of, &start_after, &horizon_end)
@@ -197,6 +204,7 @@ impl<R: ReportsRepository> ReportsService<R> {
             month_income_cents: income.total_cents,
             month_expense_cents: spending.total_cents,
             month_result_cents: income.total_cents - spending.total_cents,
+            month_savings_yield_cents,
             card_debt_cents,
             card_credit_cents,
             overdue_installments_cents,

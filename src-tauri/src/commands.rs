@@ -16,7 +16,7 @@ use tally_infra::{
     SqliteCardsRepository, SqliteCategoriesRepository, SqliteCdiRepository,
     SqliteMovementsRepository, SqliteReportsRepository, SqliteSavingsRepository,
 };
-use tauri::State;
+use tauri::{AppHandle, Emitter, Manager, State};
 
 use crate::state::AppState;
 
@@ -215,12 +215,72 @@ pub async fn get_cdi_status(state: State<'_, AppState>) -> Result<CdiStatusDto, 
     cdi_service(state.inner())?.status().await
 }
 
+fn emit_cdi_status(app: &AppHandle, status: &CdiStatusDto) {
+    if let Err(error) = app.emit("cdi-status", status) {
+        tracing::warn!(error = %error, "falha ao emitir status do CDI");
+    }
+}
+
+pub async fn auto_refresh_cdi(app: AppHandle) {
+    let state = app.state::<AppState>();
+    let service = match cdi_service(state.inner()) {
+        Ok(service) => service,
+        Err(error) => {
+            tracing::warn!(error = %error, "CDI automático sem banco disponível");
+            return;
+        }
+    };
+
+    let needed = match service.should_refresh_on_startup().await {
+        Ok(needed) => needed,
+        Err(error) => {
+            tracing::warn!(error = %error, "falha ao avaliar o cache do CDI");
+            return;
+        }
+    };
+    if !needed {
+        return;
+    }
+
+    // A mesma trava do refresh manual evita duas consultas simultâneas ao SGS.
+    let _guard = state.refresh_lock.lock().await;
+    let needed = match service.should_refresh_on_startup().await {
+        Ok(needed) => needed,
+        Err(error) => {
+            tracing::warn!(error = %error, "falha ao reavaliar o cache do CDI");
+            return;
+        }
+    };
+    if !needed {
+        return;
+    }
+
+    let status = match service.refresh(None).await {
+        Ok(status) => status,
+        Err(error) => {
+            tracing::warn!(error = %error, "falha ao atualizar taxas CDI automaticamente");
+            match service.status().await {
+                Ok(status) => status,
+                Err(status_error) => {
+                    tracing::warn!(error = %status_error, "falha ao ler o status do CDI");
+                    return;
+                }
+            }
+        }
+    };
+    emit_cdi_status(&app, &status);
+}
+
 #[tauri::command]
 pub async fn refresh_cdi_rates(
     state: State<'_, AppState>,
+    app: AppHandle,
     from: Option<String>,
 ) -> Result<CdiStatusDto, AppError> {
-    cdi_service(state.inner())?.refresh(from.as_deref()).await
+    let _guard = state.refresh_lock.lock().await;
+    let status = cdi_service(state.inner())?.refresh(from.as_deref()).await?;
+    emit_cdi_status(&app, &status);
+    Ok(status)
 }
 
 #[tauri::command]

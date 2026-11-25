@@ -1,5 +1,5 @@
 use async_trait::async_trait;
-use chrono::{Duration, Local};
+use chrono::{Datelike, Duration, Local};
 use rusqlite::{OptionalExtension, params};
 use tally_app::savings::{YieldMode, calculate_yield};
 use tally_app::{
@@ -2061,5 +2061,348 @@ async fn migration_0008_preserves_yields_and_drops_the_one_per_day_index() {
     assert_eq!(
         second.base_cents,
         original.base_cents + original.yield_cents
+    );
+}
+
+#[tokio::test]
+async fn reversing_last_of_day_allows_replacing_previous_confirmed() {
+    let fixture = fixture().await;
+    let bank = account(&fixture, "Banco", 500_000).await;
+    let pot = savings(&fixture, "Cofrinho", "calendar", 100.0).await;
+    transfer(&fixture, &bank, &pot, 100_000, "2026-11-02").await;
+
+    let first = yield_at(&fixture, &pot, "2026-11-03").await;
+    let last = yield_at(&fixture, &pot, "2026-11-03").await;
+    fixture
+        .savings
+        .reverse_yield(ReverseSavingsYieldInput {
+            yield_id: last.id.clone(),
+            as_of: "2026-11-05".to_owned(),
+        })
+        .await
+        .expect("reversal do último");
+
+    let replacement = fixture
+        .savings
+        .replace_yield(ReplaceSavingsYieldInput {
+            yield_id: first.id.clone(),
+        })
+        .await
+        .expect("substituição do penúltimo após estorno do último");
+    assert_eq!(replacement.as_of, first.as_of);
+    assert_eq!(replacement.base_cents, first.base_cents);
+    assert_ne!(replacement.id, first.id);
+
+    let history = fixture
+        .savings
+        .overview(&pot)
+        .await
+        .expect("overview")
+        .yields;
+    assert_eq!(history.len(), 3);
+    for id in [&first.id, &last.id] {
+        let stored = history
+            .iter()
+            .find(|item| item.id == *id)
+            .expect("snapshot preservado");
+        assert_eq!(stored.status, "reversed");
+        assert!(stored.reversal_entry_id.is_some());
+        assert_eq!(
+            stored.yield_cents,
+            if *id == first.id {
+                first.yield_cents
+            } else {
+                last.yield_cents
+            }
+        );
+    }
+}
+
+#[tokio::test]
+async fn reversed_yield_cannot_be_replaced_or_reversed_again() {
+    let fixture = fixture().await;
+    let bank = account(&fixture, "Banco", 500_000).await;
+    let pot = savings(&fixture, "Cofrinho", "calendar", 100.0).await;
+    transfer(&fixture, &bank, &pot, 100_000, "2026-11-02").await;
+
+    let first = yield_at(&fixture, &pot, "2026-11-03").await;
+    let last = yield_at(&fixture, &pot, "2026-11-03").await;
+    fixture
+        .savings
+        .reverse_yield(ReverseSavingsYieldInput {
+            yield_id: last.id.clone(),
+            as_of: "2026-11-05".to_owned(),
+        })
+        .await
+        .expect("reversal");
+
+    assert!(matches!(
+        fixture
+            .savings
+            .replace_yield(ReplaceSavingsYieldInput {
+                yield_id: last.id.clone(),
+            })
+            .await,
+        Err(AppError::Conflict { .. })
+    ));
+    assert!(matches!(
+        fixture
+            .savings
+            .reverse_yield(ReverseSavingsYieldInput {
+                yield_id: last.id.clone(),
+                as_of: "2026-11-06".to_owned(),
+            })
+            .await,
+        Err(AppError::Conflict { .. })
+    ));
+    assert_eq!(first.status, "confirmed");
+}
+
+#[tokio::test]
+async fn same_day_tie_uses_insertion_order_instead_of_uuid() {
+    let fixture = fixture().await;
+    let bank = account(&fixture, "Banco", 500_000).await;
+    let pot = savings(&fixture, "Cofrinho", "calendar", 100.0).await;
+    transfer(&fixture, &bank, &pot, 100_000, "2026-11-02").await;
+
+    let first = yield_at(&fixture, &pot, "2026-11-03").await;
+    let last = yield_at(&fixture, &pot, "2026-11-03").await;
+    // Força empate em `created_at` e um id menor no registro inserido por último:
+    // só a ordem de inserção (rowid) identifica corretamente o último do dia.
+    let renamed = "00000000-0000-7000-8000-000000000001".to_owned();
+    let first_id = first.id.clone();
+    let last_id = last.id.clone();
+    let renamed_for_update = renamed.clone();
+    fixture
+        .db
+        .call(move |connection| {
+            connection.execute(
+                "UPDATE savings_yields SET created_at = '2026-11-03T12:00:00.000Z'
+                 WHERE id IN (?1, ?2)",
+                params![first_id, last_id.clone()],
+            )?;
+            connection.execute(
+                "UPDATE savings_yields SET id = ?1 WHERE id = ?2",
+                params![renamed_for_update, last_id],
+            )
+        })
+        .await
+        .expect("empate forçado");
+
+    fixture
+        .savings
+        .reverse_yield(ReverseSavingsYieldInput {
+            yield_id: renamed.clone(),
+            as_of: "2026-11-05".to_owned(),
+        })
+        .await
+        .expect("reversal do último inserido");
+
+    let replacement = fixture
+        .savings
+        .replace_yield(ReplaceSavingsYieldInput {
+            yield_id: first.id.clone(),
+        })
+        .await
+        .expect("substituição do penúltimo");
+    assert_eq!(replacement.as_of, first.as_of);
+    assert_eq!(replacement.base_cents, first.base_cents);
+}
+
+#[tokio::test]
+async fn delete_stays_blocked_when_all_yields_are_reversed() {
+    let fixture = fixture().await;
+    let bank = account(&fixture, "Banco", 500_000).await;
+    let pot = savings(&fixture, "Cofrinho", "calendar", 100.0).await;
+    transfer(&fixture, &bank, &pot, 100_000, "2026-11-02").await;
+
+    let first = yield_at(&fixture, &pot, "2026-11-03").await;
+    let last = yield_at(&fixture, &pot, "2026-11-03").await;
+    for id in [&first.id, &last.id] {
+        fixture
+            .savings
+            .reverse_yield(ReverseSavingsYieldInput {
+                yield_id: id.clone(),
+                as_of: "2026-11-05".to_owned(),
+            })
+            .await
+            .expect("todos os rendimentos estornados");
+    }
+
+    assert!(matches!(
+        fixture.accounts.delete(&pot).await,
+        Err(AppError::Conflict { .. })
+    ));
+    fixture
+        .accounts
+        .set_archived(&pot, true)
+        .await
+        .expect("arquivamento permitido");
+    assert!(
+        fixture
+            .savings
+            .create_yield(CreateSavingsYieldInput {
+                account_id: pot.clone(),
+                as_of: "2026-11-06".to_owned(),
+            })
+            .await
+            .is_err()
+    );
+    assert!(
+        fixture
+            .savings
+            .reverse_yield(ReverseSavingsYieldInput {
+                yield_id: first.id.clone(),
+                as_of: "2026-11-07".to_owned(),
+            })
+            .await
+            .is_err()
+    );
+}
+
+fn current_month_dates() -> (String, String, String) {
+    let now = Local::now().date_naive();
+    let first = now.with_day(1).expect("dia 1 do mês");
+    (
+        first.format("%Y-%m-%d").to_string(),
+        now.format("%Y-%m-%d").to_string(),
+        (first - Duration::days(1)).format("%Y-%m-%d").to_string(),
+    )
+}
+
+#[tokio::test]
+async fn month_yield_indicator_sums_every_yield_of_the_day() {
+    let fixture = fixture().await;
+    let (first_of_month, today, _) = current_month_dates();
+    let bank = account(&fixture, "Banco", 500_000).await;
+    let pot = savings(&fixture, "Cofrinho", "calendar", 100.0).await;
+    transfer(&fixture, &bank, &pot, 100_000, &first_of_month).await;
+
+    let dashboard_before = fixture.reports.dashboard().await.expect("dashboard");
+    assert_eq!(dashboard_before.month_savings_yield_cents, 0);
+
+    let first = yield_at(&fixture, &pot, &today).await;
+    let second = yield_at(&fixture, &pot, &today).await;
+    let third = yield_at(&fixture, &pot, &today).await;
+
+    let dashboard = fixture.reports.dashboard().await.expect("dashboard");
+    assert_eq!(
+        dashboard.month_savings_yield_cents,
+        first.yield_cents + second.yield_cents + third.yield_cents
+    );
+    assert_eq!(
+        dashboard.month_income_cents,
+        dashboard_before.month_income_cents
+    );
+    assert_eq!(
+        dashboard.month_expense_cents,
+        dashboard_before.month_expense_cents
+    );
+    assert_eq!(
+        dashboard.month_result_cents,
+        dashboard_before.month_result_cents
+    );
+
+    let flow = fixture
+        .reports
+        .cash_flow(ReportFilter {
+            from: Some(dashboard.month_from.clone()),
+            to: Some(dashboard.month_to.clone()),
+            period: None,
+            category_id: None,
+            account_id: None,
+            payment_method: None,
+        })
+        .await
+        .expect("cash flow");
+    assert_eq!(flow.net_cents, 0);
+}
+
+#[tokio::test]
+async fn month_yield_indicator_subtracts_reversal_of_previous_month_yield() {
+    let fixture = fixture().await;
+    let (_, today, previous_month_end) = current_month_dates();
+    let previous_month_day = (Local::now().date_naive().with_day(1).expect("dia 1")
+        - Duration::days(2))
+    .format("%Y-%m-%d")
+    .to_string();
+    let bank = account(&fixture, "Banco", 500_000).await;
+    let pot = savings(&fixture, "Cofrinho", "calendar", 100.0).await;
+    transfer(&fixture, &bank, &pot, 100_000, &previous_month_day).await;
+
+    let old = yield_at(&fixture, &pot, &previous_month_end).await;
+    let dashboard_before = fixture.reports.dashboard().await.expect("dashboard");
+    assert_eq!(dashboard_before.month_savings_yield_cents, 0);
+
+    fixture
+        .savings
+        .reverse_yield(ReverseSavingsYieldInput {
+            yield_id: old.id.clone(),
+            as_of: today.clone(),
+        })
+        .await
+        .expect("reversal no mês atual");
+
+    let dashboard = fixture.reports.dashboard().await.expect("dashboard");
+    assert_eq!(dashboard.month_savings_yield_cents, -old.yield_cents);
+}
+
+#[tokio::test]
+async fn month_yield_indicator_nets_same_month_reversal_and_replacement() {
+    let fixture = fixture().await;
+    let (first_of_month, today, _) = current_month_dates();
+    let bank = account(&fixture, "Banco", 500_000).await;
+    let pot = savings(&fixture, "Cofrinho", "calendar", 100.0).await;
+    transfer(&fixture, &bank, &pot, 100_000, &first_of_month).await;
+
+    let reverted = yield_at(&fixture, &pot, &today).await;
+    fixture
+        .savings
+        .reverse_yield(ReverseSavingsYieldInput {
+            yield_id: reverted.id.clone(),
+            as_of: today.clone(),
+        })
+        .await
+        .expect("reversal");
+    let after_reversal = fixture.reports.dashboard().await.expect("dashboard");
+    assert_eq!(after_reversal.month_savings_yield_cents, 0);
+
+    let original = yield_at(&fixture, &pot, &today).await;
+    let replacement = fixture
+        .savings
+        .replace_yield(ReplaceSavingsYieldInput {
+            yield_id: original.id.clone(),
+        })
+        .await
+        .expect("replacement");
+    let dashboard = fixture.reports.dashboard().await.expect("dashboard");
+    // O original e seu estorno se cancelam no mês; sobra o rendimento substituto.
+    assert_eq!(dashboard.month_savings_yield_cents, replacement.yield_cents);
+}
+
+#[tokio::test]
+async fn month_yield_indicator_matches_savings_balance_delta() {
+    let fixture = fixture().await;
+    let (first_of_month, today, previous_month_end) = current_month_dates();
+    let bank = account(&fixture, "Banco", 500_000).await;
+    let pot = savings(&fixture, "Cofrinho", "calendar", 100.0).await;
+    transfer(&fixture, &bank, &pot, 100_000, &previous_month_end).await;
+
+    let before = balance(&fixture, &pot).await;
+    yield_at(&fixture, &pot, &first_of_month).await;
+    let last = yield_at(&fixture, &pot, &today).await;
+    fixture
+        .savings
+        .reverse_yield(ReverseSavingsYieldInput {
+            yield_id: last.id.clone(),
+            as_of: today.clone(),
+        })
+        .await
+        .expect("reversal");
+
+    let dashboard = fixture.reports.dashboard().await.expect("dashboard");
+    assert_eq!(
+        dashboard.month_savings_yield_cents,
+        balance(&fixture, &pot).await - before
     );
 }

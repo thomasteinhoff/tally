@@ -146,7 +146,7 @@ impl SavingsRepository for SqliteSavingsRepository {
             .call(move |connection| {
                 let sql = format!(
                     "{SELECT_YIELD} WHERE sy.account_id = ?1 \
-                     ORDER BY sy.as_of DESC, sy.created_at DESC, sy.id DESC"
+                     ORDER BY sy.as_of DESC, sy.created_at DESC, sy.rowid DESC"
                 );
                 let mut statement = connection.prepare(&sql)?;
                 let rows = statement.query_map([account_id], map_yield_row)?;

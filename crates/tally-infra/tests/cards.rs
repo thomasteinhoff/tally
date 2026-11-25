@@ -1,3 +1,4 @@
+use chrono::{Datelike, Local, Months};
 use tally_app::{
     AccountsService, AppError, CardsService, CategoriesService, CreateAccountInput,
     CreateCardPaymentInput, CreateCardPurchaseInput, CreateCategoryInput, MovementsService,
@@ -907,4 +908,69 @@ async fn recognized_entries_stay_out_of_the_movements_list() {
         .await,
         3
     );
+}
+
+#[tokio::test]
+async fn suggested_invoice_total_clears_current_commitment_and_leaves_future_debt() {
+    let fixture = fixture().await;
+    let now = Local::now().date_naive();
+    let first_of_month = now.with_day(1).expect("dia 1 do mês");
+    let previous_month = first_of_month
+        .checked_sub_months(Months::new(1))
+        .expect("mês anterior");
+    let overdue = previous_month
+        .with_day(now.day().min(28))
+        .expect("dia do vencimento")
+        .format("%Y-%m-%d")
+        .to_string();
+    let today = now.format("%Y-%m-%d").to_string();
+    let bank = account(&fixture, "Banco", 500_000).await;
+    let card_id = card(&fixture, "Cartao", 5_000, Some(500_000)).await;
+    let category_id = category(&fixture, "Compras").await;
+    fixture
+        .cards
+        .create_purchase(purchase_input(&card_id, &category_id, 90_000, 3, &overdue))
+        .await
+        .expect("purchase");
+
+    let summary = fixture.cards.card_summary(&card_id).await.expect("summary");
+    assert_eq!(summary.initial_debt_cents, 5_000);
+    assert_eq!(
+        summary.overdue_cents + summary.current_month_cents,
+        60_000,
+        "duas parcelas vencem até o fim do mês corrente"
+    );
+    assert_eq!(summary.future_cents, 30_000);
+    let invoice_total =
+        summary.initial_debt_cents + summary.overdue_cents + summary.current_month_cents;
+    assert_eq!(invoice_total, 65_000);
+
+    let expense_before = recognized_expense(&fixture).await;
+    let net_worth_before = net_worth(&fixture).await;
+    fixture
+        .cards
+        .create_payment(payment_input(&card_id, &bank, invoice_total, &today))
+        .await
+        .expect("payment");
+
+    let after = fixture
+        .cards
+        .card_summary(&card_id)
+        .await
+        .expect("summary after");
+    assert_eq!(after.initial_debt_cents, 0);
+    assert_eq!(after.overdue_cents, 0);
+    assert_eq!(after.current_month_cents, 0);
+    assert_eq!(after.future_cents, 30_000);
+    assert_eq!(after.debt_cents, 30_000);
+    assert_eq!(
+        scalar(&fixture, "SELECT COUNT(*) FROM installment_allocations",).await,
+        2
+    );
+    assert_eq!(
+        scalar(&fixture, "SELECT initial_balance_cents FROM card_payments",).await,
+        5_000
+    );
+    assert_eq!(recognized_expense(&fixture).await, expense_before);
+    assert_eq!(net_worth(&fixture).await, net_worth_before);
 }

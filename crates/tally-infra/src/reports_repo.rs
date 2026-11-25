@@ -636,6 +636,27 @@ impl ReportsRepository for SqliteReportsRepository {
             .await
     }
 
+    async fn savings_yield_net(&self, from: &str, to: &str) -> Result<i64, AppError> {
+        let from = from.to_owned();
+        let to = to.to_owned();
+        self.db
+            .call(move |connection| {
+                connection.query_row(
+                    "SELECT COALESCE(SUM(p.amount_cents), 0)
+                     FROM savings_yields sy
+                     JOIN journal_entries e
+                       ON e.id = sy.entry_id OR e.id = sy.reversal_entry_id
+                     JOIN postings p
+                       ON p.entry_id = e.id AND p.account_id = sy.account_id
+                     WHERE e.posted_at IS NOT NULL
+                       AND e.occurred_on BETWEEN ?1 AND ?2",
+                    params![from, to],
+                    |row| row.get(0),
+                )
+            })
+            .await
+    }
+
     async fn card_totals(&self) -> Result<(i64, i64), AppError> {
         self.db
             .call(|connection| {

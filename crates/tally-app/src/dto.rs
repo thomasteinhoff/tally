@@ -737,6 +737,9 @@ pub struct DashboardDto {
     pub month_expense_cents: i64,
     #[ts(type = "number")]
     pub month_result_cents: i64,
+    /// Efeito líquido publicado no mês; informativo, fora de receitas/resultado/caixa.
+    #[ts(type = "number")]
+    pub month_savings_yield_cents: i64,
     #[ts(type = "number")]
     pub card_debt_cents: i64,
     #[ts(type = "number")]

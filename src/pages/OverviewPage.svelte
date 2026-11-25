@@ -413,7 +413,7 @@
         </span>
       </header>
 
-      <div class="data-grid data-grid--auto">
+      <div class="data-grid data-grid--summary">
         <div class="data-cell">
           <div class="data-label">Receitas</div>
           <div class="data-value amount-positive">
@@ -424,6 +424,18 @@
           <div class="data-label">Despesas</div>
           <div class="data-value amount-negative">
             {formatCents(dashboard.month_expense_cents)}
+          </div>
+        </div>
+        <div class="data-cell">
+          <div class="data-label">Rendimento dos cofrinhos</div>
+          <div
+            class="data-value"
+            class:amount-negative={dashboard.month_savings_yield_cents < 0}
+          >
+            {formatCents(dashboard.month_savings_yield_cents)}
+          </div>
+          <div class="data-note">
+            líquido de estornos · não é receita nem fluxo de caixa
           </div>
         </div>
         <div class="data-cell">

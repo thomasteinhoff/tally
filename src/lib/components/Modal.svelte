@@ -20,7 +20,7 @@
       document.activeElement instanceof HTMLElement
         ? document.activeElement
         : null;
-    dialog?.querySelector<HTMLElement>("input, select, textarea")?.focus();
+    (dialog?.querySelector<HTMLElement>("input, select, textarea") ?? dialog)?.focus();
 
     return () => previousFocus?.focus();
   });

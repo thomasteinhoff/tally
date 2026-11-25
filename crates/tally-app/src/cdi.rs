@@ -1,4 +1,4 @@
-use chrono::{Datelike, Duration, Local, NaiveDate};
+use chrono::{DateTime, Datelike, Duration, Local, NaiveDate, Utc, Weekday};
 
 use crate::dto::CdiStatusDto;
 use crate::error::AppError;
@@ -33,6 +33,37 @@ fn parse_rate_date(value: &str) -> Result<NaiveDate, AppError> {
         .map_err(|_| AppError::validation("data da taxa CDI inválida"))
 }
 
+/// Decisão pura da atualização automática na abertura. Falha recente bloqueia
+/// novas tentativas por 1h; sem falha, um sucesso recente bloqueia por 24h.
+pub fn startup_refresh_needed(status: &CdiStatusDto, now: DateTime<Utc>) -> bool {
+    if matches!(now.weekday(), Weekday::Sat | Weekday::Sun) {
+        return false;
+    }
+    if status.last_error.is_some() {
+        return match parse_timestamp(status.last_attempt_at.as_deref()) {
+            Some(attempted_at) => elapsed_hours_at_least(&now, &attempted_at, 1),
+            None => true,
+        };
+    }
+    if status.rate_count == 0 {
+        return true;
+    }
+    match parse_timestamp(status.last_success_at.as_deref()) {
+        Some(success_at) => elapsed_hours_at_least(&now, &success_at, 24),
+        None => true,
+    }
+}
+
+fn parse_timestamp(value: Option<&str>) -> Option<DateTime<Utc>> {
+    value
+        .and_then(|value| DateTime::parse_from_rfc3339(value).ok())
+        .map(|value| value.with_timezone(&Utc))
+}
+
+fn elapsed_hours_at_least(now: &DateTime<Utc>, then: &DateTime<Utc>, hours: i64) -> bool {
+    now.signed_duration_since(*then).num_hours() >= hours
+}
+
 pub struct CdiService<R, S> {
     repo: R,
     source: S,
@@ -45,6 +76,12 @@ impl<R: CdiRatesRepository, S: CdiRateSource> CdiService<R, S> {
 
     pub async fn status(&self) -> Result<CdiStatusDto, AppError> {
         self.repo.status().await
+    }
+
+    /// Avalia o cache local sem abrir conexão com o SGS.
+    pub async fn should_refresh_on_startup(&self) -> Result<bool, AppError> {
+        let status = self.status().await?;
+        Ok(startup_refresh_needed(&status, Utc::now()))
     }
 
     /// Atualização manual: busca incrementos de 7 dias e substitui o cache
@@ -104,8 +141,32 @@ impl<R: CdiRatesRepository, S: CdiRateSource> CdiService<R, S> {
 
 #[cfg(test)]
 mod tests {
-    use super::{earliest_sgs_date, parse_daily_rate};
-    use chrono::NaiveDate;
+    use super::{CDI_SERIES, earliest_sgs_date, parse_daily_rate, startup_refresh_needed};
+    use crate::dto::CdiStatusDto;
+    use chrono::{DateTime, NaiveDate, Utc};
+
+    fn now(value: &str) -> DateTime<Utc> {
+        DateTime::parse_from_rfc3339(value)
+            .expect("data")
+            .with_timezone(&Utc)
+    }
+
+    fn status(
+        rate_count: i64,
+        last_success_at: Option<&str>,
+        last_attempt_at: Option<&str>,
+        last_error: Option<&str>,
+    ) -> CdiStatusDto {
+        CdiStatusDto {
+            series: CDI_SERIES.to_owned(),
+            rate_count,
+            first_rate_date: None,
+            last_rate_date: None,
+            last_success_at: last_success_at.map(str::to_owned),
+            last_attempt_at: last_attempt_at.map(str::to_owned),
+            last_error: last_error.map(str::to_owned),
+        }
+    }
 
     #[test]
     fn converts_published_percent_to_decimal_fraction() {
@@ -136,5 +197,56 @@ mod tests {
             earliest_sgs_date(today),
             NaiveDate::from_ymd_opt(2014, 3, 1).expect("data")
         );
+    }
+
+    #[test]
+    fn empty_cache_refreshes_on_a_weekday() {
+        let current = now("2026-11-24T12:00:00Z");
+        assert!(startup_refresh_needed(
+            &status(0, None, None, None),
+            current
+        ));
+    }
+
+    #[test]
+    fn recent_success_skips_refresh() {
+        let current = now("2026-11-24T12:00:00Z");
+        let cached = status(1, Some("2026-11-23T13:00:00Z"), None, None);
+        assert!(!startup_refresh_needed(&cached, current));
+        let stale = status(1, Some("2026-11-23T12:00:00Z"), None, None);
+        assert!(startup_refresh_needed(&stale, current));
+    }
+
+    #[test]
+    fn old_failure_allows_refresh_even_with_recent_success() {
+        let current = now("2026-11-24T12:00:00Z");
+        let cached = status(
+            1,
+            Some("2026-11-23T13:00:00Z"),
+            Some("2026-11-24T11:00:00Z"),
+            Some("sem rede"),
+        );
+        assert!(startup_refresh_needed(&cached, current));
+    }
+
+    #[test]
+    fn recent_failure_waits_one_hour() {
+        let current = now("2026-11-24T12:00:00Z");
+        let cached = status(
+            1,
+            Some("2026-11-20T12:00:00Z"),
+            Some("2026-11-24T11:30:00Z"),
+            Some("sem rede"),
+        );
+        assert!(!startup_refresh_needed(&cached, current));
+    }
+
+    #[test]
+    fn weekends_skip_refresh_even_with_empty_cache() {
+        let current = now("2026-11-28T12:00:00Z");
+        assert!(!startup_refresh_needed(
+            &status(0, None, None, None),
+            current
+        ));
     }
 }

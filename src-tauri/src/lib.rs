@@ -44,12 +44,23 @@ pub fn run() {
                     }
                 };
 
-            let _ = app.manage(AppState {
+            let state = AppState {
                 db,
                 paths,
                 app_version: env!("CARGO_PKG_VERSION").to_owned(),
                 boot_error,
-            });
+                auto_refresh_started: std::sync::atomic::AtomicBool::new(false),
+                refresh_lock: std::sync::Arc::new(tauri::async_runtime::Mutex::new(())),
+            };
+            let start_auto_refresh = state.claim_auto_refresh();
+            let app_handle = app.handle().clone();
+            let _ = app.manage(state);
+
+            if start_auto_refresh {
+                tauri::async_runtime::spawn(async move {
+                    commands::auto_refresh_cdi(app_handle).await;
+                });
+            }
 
             Ok(())
         })

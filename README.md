@@ -14,10 +14,11 @@ dobradas: cada movimentação afeta contas reais e o patrimônio de forma
 consistente. Tudo é calculado localmente, em Rust, sobre um banco SQLite que
 fica no seu computador.
 
-Não há login, sincronização ou servidor. O aplicativo funciona offline. A única
-requisição opcional consulta a taxa pública do CDI no Banco Central e envia
-apenas o identificador da série e um intervalo de datas — nenhum dado
-financeiro ou pessoal sai da máquina.
+Não há login, sincronização ou servidor. Os dados e os cálculos ficam no
+computador. O aplicativo pode consultar a taxa pública do CDI na SGS do Banco
+Central, automaticamente na abertura ou quando o usuário acionar a atualização;
+a requisição envia apenas o identificador da série e um intervalo de datas —
+nenhum dado financeiro ou pessoal sai da máquina.
 
 <!-- Capturas de tela: adicionar aqui quando estiverem disponíveis. -->
 
@@ -26,12 +27,18 @@ financeiro ou pessoal sai da máquina.
 - Contas de ativo e cartões de crédito, com limite, dívida e disponível.
 - Receitas, despesas, transferências e ajustes.
 - Compras parceladas de 1 a 60 vezes, com vencimentos ajustados por mês.
+- Pagamento de cartão com sugestão de dívida inicial + parcelas vencidas e do
+  mês, com alocação FIFO.
 - Compromissos futuros e parcelas vencidas.
 - Visão geral com patrimônio líquido, resultado do mês e últimos lançamentos.
 - Relatórios e análises por categoria, com filtros combináveis.
 - Fluxo de caixa por mês e por origem.
 - Backup local, restauração com snapshot de segurança e exportação CSV.
-- Cofrinhos com aplicações, resgates, ajustes e rendimentos estimados pelo CDI.
+- Cofrinhos com aplicações, resgates, ajustes e rendimentos acumulativos.
+- Histórico de rendimentos com substituição do último valor confirmado e estorno
+  compensatório.
+- Indicador mensal de rendimentos, separado de receitas, despesas e fluxo de
+  caixa.
 - Temas claro, escuro e sistema.
 
 ## Download
@@ -48,8 +55,12 @@ Versões anteriores e notas de cada lançamento ficam na página de
 Os rendimentos são uma **estimativa local do Tally**, não uma reprodução
 contratual de produto financeiro algum. A taxa diária vem da SGS 12 do Banco
 Central (`% p.d.`, convertida para fração decimal dividindo por 100) e fica em
-cache no SQLite. O cache só muda quando o usuário aciona “Atualizar taxas”:
-abrir o aplicativo ou gerar um rendimento nunca faz rede.
+cache no SQLite. O aplicativo atualiza o cache automaticamente na abertura, em
+dias úteis: nova tentativa após pelo menos 24h desde o último sucesso ou 1h
+desde a última falha. Sábado e domingo não contam como dias úteis e não há
+calendário de feriados. Se a consulta falhar, o cache existente continua
+disponível; a atualização manual continua em Configurações. Gerar rendimentos
+usa o cache local e não faz rede.
 
 Com `p = percentual contratado / 10.000` e `r = taxa diária publicada`, o Tally
 calcula `yield_cents = round(base_cents × (f − 1))`, onde:
@@ -64,6 +75,12 @@ A base é o saldo no início do dia: saldo inicial, aplicações, resgates e aju
 da própria data só entram na base no dia seguinte. Cada rendimento registra a
 data da publicação, a série (`12`), a taxa diária usada e quando ela foi obtida;
 mudar a configuração ou atualizar o cache não recalcula snapshots já gravados.
+
+Cada cofrinho mantém seu histórico de rendimentos. O último rendimento
+confirmado de cada data pode ser substituído; o estorno registra um lançamento
+compensatório e marca o snapshot anterior como estornado, sem apagar o
+histórico. O indicador mensal de rendimentos é informativo e fica fora de
+receitas, despesas, resultado e fluxo de caixa.
 
 ## Privacidade e armazenamento
 

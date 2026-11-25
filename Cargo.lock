@@ -3847,7 +3847,7 @@ dependencies = [
 
 [[package]]
 name = "tally"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "tally-app",
  "tally-infra",
@@ -3863,7 +3863,7 @@ dependencies = [
 
 [[package]]
 name = "tally-app"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "async-trait",
  "chrono",
@@ -3878,14 +3878,14 @@ dependencies = [
 
 [[package]]
 name = "tally-domain"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "chrono",
 ]
 
 [[package]]
 name = "tally-infra"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "async-trait",
  "chrono",

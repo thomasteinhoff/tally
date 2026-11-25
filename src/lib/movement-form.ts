@@ -1,7 +1,14 @@
 import type {
+  CardSummaryDto,
   CreateCardPaymentInput,
   CreateCardPurchaseInput,
 } from "./api/bindings";
+
+/// Compromisso do ciclo atual: dívida inicial + vencidas + vencendo no mês.
+/// Parcelas futuras ficam de fora, assim como qualquer crédito em favor do titular.
+export function suggestedCardPaymentCents(card: CardSummaryDto): number {
+  return card.initial_debt_cents + card.overdue_cents + card.current_month_cents;
+}
 
 export type SimpleMovementKind =
   | "expense"

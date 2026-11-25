@@ -1,7 +1,7 @@
 {
   "name": "tally",
   "private": true,
-  "version": "0.1.0",
+  "version": "0.2.0",
   "type": "module",
   "scripts": {
     "dev": "vite --port 1420 --strictPort",
@@ -11,7 +11,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "tauri": "tauri",
-    "bindings": "cargo test -p tally-app export_bindings",
+    "bindings": "cargo test -p tally-app export_bindings && node -e \"const fs=require('fs');const p='src/lib/api/bindings/DashboardDto.ts';fs.writeFileSync(p,fs.readFileSync(p,'utf8').replace(/[ \\t]+$/gm,''))\"",
     "rust:fmt": "cargo fmt --all",
     "rust:clippy": "cargo clippy --workspace --all-targets -- -D warnings",
     "rust:test": "cargo test --workspace"
